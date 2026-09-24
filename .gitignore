@@ -5,3 +5,4 @@ web/dist/*
 web/playwright-report/
 web/test-results/
 .playwright-mcp/
+/flowscape
