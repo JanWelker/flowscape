@@ -110,6 +110,18 @@ make image      # container build with Apple's container CLI
 The Hubble API comes straight from the `github.com/cilium/cilium` module,
 pinned to the cluster's Cilium minor; Renovate leaves that one alone.
 
+## Releases
+
+Tags are semver, `vX.Y.Z` on `main`. Each tag publishes the image as
+`ghcr.io/janwelker/flowscape:X.Y.Z` and `X.Y` with a provenance attestation,
+and a [GitHub release](https://github.com/JanWelker/flowscape/releases) with
+generated notes and static binaries for Linux and macOS:
+
+```bash
+curl -sSL https://github.com/JanWelker/flowscape/releases/latest/download/flowscape_0.2.0_darwin_arm64.tar.gz | tar xz
+./flowscape_0.2.0_darwin_arm64/flowscape --demo
+```
+
 ## Metrics
 
 Prefixed `flowscape_`: flows received and skipped by reason, relay connection

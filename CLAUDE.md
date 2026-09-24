@@ -87,7 +87,8 @@ npx --package renovate@latest renovate-config-validator
 ## Releasing
 
 Tag `vX.Y.Z` on `main`. `release.yaml` builds the multi-arch image, pushes
-`ghcr.io/janwelker/flowscape:X.Y.Z` and `X.Y`, and attests provenance;
+`ghcr.io/janwelker/flowscape:X.Y.Z` and `X.Y`, attests provenance, and
+creates the GitHub release with `hack/release-assets.sh` archives;
 verify with `gh attestation verify oci://ghcr.io/janwelker/flowscape:X.Y.Z
 --owner JanWelker`. Renovate in `homelab-apps` pins the new digest into
 `flowscape/deployment.yaml` with no release-age wait.

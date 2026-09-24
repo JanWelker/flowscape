@@ -64,3 +64,41 @@ jobs:
           subject-name: ghcr.io/janwelker/flowscape
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  binaries:
+    name: Publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build the frontend
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix web run build
+
+      - name: Build the archives
+        run: hack/release-assets.sh "${GITHUB_REF_NAME}"
+
+      # One release per semver tag; the notes come from the merged pull
+      # requests and commits since the previous tag.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes \
+            --title "${GITHUB_REF_NAME}" dist/*.tar.gz dist/sha256sums.txt
