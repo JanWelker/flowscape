@@ -93,6 +93,7 @@ would turn a data outage into a 502.
 | Window slider | 10 s to the retention; rates and the sparkline follow |
 | `space` | Pause; ticks are buffered for a minute, longer than that reconnects for a fresh snapshot |
 | `f` | Fit the ring into the view |
+| `h`, or the ‹ button | Collapse the controls to the status pill; remembered per browser |
 | `?debug` in the URL | Frame rate and object counts |
 
 ## Development

@@ -62,6 +62,13 @@ test("renders the demo cluster and takes the README screenshot", async ({ page }
   await page.keyboard.press("Escape");
   await expect(page.locator("#panel")).toBeHidden();
 
+  await page.keyboard.press("h");
+  await expect(page.locator("#filters")).toHaveClass(/collapsed/);
+  await expect(page.locator("#filters #ns")).toBeHidden();
+  await page.locator("#collapse").click();
+  await expect(page.locator("#filters")).not.toHaveClass(/collapsed/);
+  await expect(page.locator("#filters #ns")).toBeVisible();
+
   await page.screenshot({ path: "../docs/screenshot.png" });
   expect(errors).toEqual([]);
 });

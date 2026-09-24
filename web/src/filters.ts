@@ -38,8 +38,12 @@ export class FiltersPanel {
       paused: false,
     };
     root.innerHTML = `
-      <div class="brand"><span class="logo"></span><h1>Flowscape</h1></div>
+      <div class="brand">
+        <span class="logo"></span><h1>Flowscape</h1>
+        <button class="collapse" id="collapse" title="collapse (h)" aria-label="collapse controls">‹</button>
+      </div>
       <div class="pill" id="pill"><span class="dot"></span><span class="text">connecting</span></div>
+      <div class="body">
       <section><h2>Namespaces</h2><div class="chips" id="ns"></div></section>
       <section><h2>Verdicts</h2><div class="chips" id="verdicts"></div></section>
       <section><h2>Protocols</h2><div class="chips" id="protocols"></div></section>
@@ -55,7 +59,18 @@ export class FiltersPanel {
         <button id="fit" title="f">fit view</button>
       </section>
       <div class="help" id="help">drag to orbit · scroll to zoom · click a node or arc</div>
+      </div>
     `;
+    const collapse = root.querySelector<HTMLButtonElement>("#collapse")!;
+    collapse.onclick = () => this.setCollapsed(!root.classList.contains("collapsed"));
+    let collapsed = window.innerWidth < 720;
+    try {
+      const saved = localStorage.getItem("flowscape.controls");
+      if (saved !== null) collapsed = saved === "collapsed";
+    } catch {
+      // storage unavailable: keep the default
+    }
+    this.setCollapsed(collapsed, false);
     this.nsBox = root.querySelector("#ns")!;
     this.pill = root.querySelector("#pill")!;
     this.pauseBtn = root.querySelector("#pause")!;
@@ -107,7 +122,23 @@ export class FiltersPanel {
         ev.preventDefault();
         this.togglePause();
       } else if (ev.key === "f") this.onFit();
+      else if (ev.key === "h") this.setCollapsed(!this.root.classList.contains("collapsed"));
     });
+  }
+
+  /** Fold the controls down to the brand and the status pill. */
+  setCollapsed(collapsed: boolean, remember = true): void {
+    this.root.classList.toggle("collapsed", collapsed);
+    const b = this.root.querySelector<HTMLButtonElement>("#collapse")!;
+    b.textContent = collapsed ? "›" : "‹";
+    b.title = collapsed ? "expand (h)" : "collapse (h)";
+    b.setAttribute("aria-label", collapsed ? "expand controls" : "collapse controls");
+    if (!remember) return;
+    try {
+      localStorage.setItem("flowscape.controls", collapsed ? "collapsed" : "open");
+    } catch {
+      // storage unavailable: nothing to remember
+    }
   }
 
   setMaxWindow(retention: number): void {
