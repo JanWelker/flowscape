@@ -146,3 +146,6 @@ var conversations = []conversation{
 }
 
 var nodeNames = []string{"cp1", "cp2", "cp3", "w1", "w2", "w3"}
+
+// One address per machine, the way host and remote-node flows carry them.
+var nodeIPs = map[string]string{"cp1": "10.9.2.11", "cp2": "10.9.2.12", "cp3": "10.9.2.13", "w1": "10.9.2.21", "w2": "10.9.2.22", "w3": "10.9.2.23"}

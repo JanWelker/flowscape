@@ -43,9 +43,15 @@ changing the code.
 - **The server keeps no per-client state.** Rates, the time window, pause
   and filters are computed in the browser from the ticks. A new UI feature
   that needs server support probably wants a new field on `Tick` instead.
-- **Layout is deterministic.** Namespaces on a ring sorted by name,
-  workloads on a sunflower spiral, reserved identities at fixed angles. A
-  new flow never moves an existing node. Do not add force simulation.
+- **Layout is deterministic.** Platforms (namespaces or machines) on a
+  ring sorted by name, workloads on a sunflower spiral, reserved identities
+  at fixed angles, machines fanned at the back. A new flow never moves an
+  existing node. Do not add force simulation.
+- **Machines are learned, not listed.** Egress flows place the source on
+  the observing node, ingress flows the destination; `host` is the
+  observer and `remote-node` addresses are named once seen as `host`. An
+  address-only anchor is retired the moment its machine is named, so the
+  graph never shows the same machine twice.
 - **Bounding volumes are fixed.** The instanced meshes and the line batches
   carry a huge bounding sphere because their buffers are rewritten in
   place; computing bounds from the initial zeros makes every raycast miss.

@@ -5,6 +5,7 @@ package graph
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,10 @@ type Node struct {
 	FirstSeen time.Time
 	LastSeen  time.Time
 	edges     int
+	// machines counts the cluster nodes this workload's pods were seen on;
+	// Machine is the most frequent one.
+	machines map[string]uint32
+	Machine  string
 }
 
 // Edge is a directed conversation.
@@ -50,11 +55,13 @@ type Graph struct {
 	edges     map[string]*Edge
 
 	newNodes  map[string]*Node
+	dirtyNode map[string]*Node
 	dirty     map[string]*[4]uint64
 	dirtyL7   map[string]bool
 	goneNodes []string
 	goneEdges []string
 	unknown   uint64
+	nodeIPs   map[string]string
 }
 
 // New returns an empty graph keeping retention seconds of history.
@@ -67,8 +74,10 @@ func New(retention time.Duration) *Graph {
 		nodes:     map[string]*Node{},
 		edges:     map[string]*Edge{},
 		newNodes:  map[string]*Node{},
+		dirtyNode: map[string]*Node{},
 		dirty:     map[string]*[4]uint64{},
 		dirtyL7:   map[string]bool{},
+		nodeIPs:   map[string]string{},
 	}
 }
 
@@ -103,21 +112,33 @@ func (g *Graph) Ingest(f *flow.Flow) Result {
 	if t.IsZero() {
 		return Result{Skipped: "time"}
 	}
-	src := endpointKey(f.GetSource(), f.GetSourceNames(), f.GetIP().GetSource())
-	dst := endpointKey(f.GetDestination(), f.GetDestinationNames(), f.GetIP().GetDestination())
-	if src == dst {
-		return Result{Skipped: "self"}
+	observer := f.GetNodeName()
+	if i := strings.Index(observer, "/"); i >= 0 {
+		observer = observer[i+1:] // cluster/node
 	}
 	proto, port := l4Key(f.GetL4())
-	ek := EdgeKey{Src: src, Dst: dst, Proto: proto, Port: port}
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	src := endpointKey(f.GetSource(), f.GetSourceNames(), f.GetIP().GetSource(), observer, g.nodeIPs, g.retireAddress)
+	dst := endpointKey(f.GetDestination(), f.GetDestinationNames(), f.GetIP().GetDestination(), observer, g.nodeIPs, g.retireAddress)
+	if src == dst {
+		return Result{Skipped: "self"}
+	}
+	ek := EdgeKey{Src: src, Dst: dst, Proto: proto, Port: port}
 	if src.Namespace == "unknown" || dst.Namespace == "unknown" {
 		g.unknown++
 	}
-	g.touchNode(src, f.GetSource(), t, len(f.GetSourceNames()) > 0)
-	g.touchNode(dst, f.GetDestination(), t, len(f.GetDestinationNames()) > 0)
+	sn := g.touchNode(src, f.GetSource(), t, len(f.GetSourceNames()) > 0)
+	dn := g.touchNode(dst, f.GetDestination(), t, len(f.GetDestinationNames()) > 0)
+	// The agent that saw the flow runs on the source's machine for egress
+	// and on the destination's for ingress.
+	switch f.GetTrafficDirection() {
+	case flow.TrafficDirection_EGRESS:
+		g.placeOn(sn, observer)
+	case flow.TrafficDirection_INGRESS:
+		g.placeOn(dn, observer)
+	}
 
 	id := ek.ID()
 	e, ok := g.edges[id]
@@ -148,7 +169,7 @@ func (g *Graph) Ingest(f *flow.Flow) Result {
 	return Result{EdgeID: id, Verdict: v}
 }
 
-func (g *Graph) touchNode(k NodeKey, ep *flow.Endpoint, t time.Time, fqdn bool) {
+func (g *Graph) touchNode(k NodeKey, ep *flow.Endpoint, t time.Time, fqdn bool) *Node {
 	id := k.ID()
 	n, ok := g.nodes[id]
 	if !ok {
@@ -161,6 +182,55 @@ func (g *Graph) touchNode(k NodeKey, ep *flow.Endpoint, t time.Time, fqdn bool) 
 	}
 	if t.After(n.LastSeen) {
 		n.LastSeen = t
+	}
+	return n
+}
+
+// retireAddress drops the anchor a machine had while it was only known by
+// address; its conversations reappear under the machine's name. Called
+// with g.mu held.
+func (g *Graph) retireAddress(ip string) {
+	id := NodeKey{ReservedNamespace, "remote-node", ip}.ID()
+	if _, ok := g.nodes[id]; !ok {
+		return
+	}
+	for eid, e := range g.edges {
+		if e.Key.Src.ID() != id && e.Key.Dst.ID() != id {
+			continue
+		}
+		delete(g.edges, eid)
+		delete(g.dirty, eid)
+		delete(g.dirtyL7, eid)
+		g.nodes[e.Key.Src.ID()].edges--
+		g.nodes[e.Key.Dst.ID()].edges--
+		g.goneEdges = append(g.goneEdges, eid)
+	}
+	delete(g.nodes, id)
+	delete(g.dirtyNode, id)
+	if _, fresh := g.newNodes[id]; fresh {
+		delete(g.newNodes, id)
+	} else {
+		g.goneNodes = append(g.goneNodes, id)
+	}
+}
+
+// placeOn records that a workload's pod runs on machine; a change of the
+// most frequent machine is sent to the clients with the next tick.
+func (g *Graph) placeOn(n *Node, machine string) {
+	if machine == "" || n.Key.Namespace == ReservedNamespace || n.Key.Namespace == "unknown" {
+		return
+	}
+	if n.machines == nil {
+		n.machines = map[string]uint32{}
+	}
+	n.machines[machine]++
+	if n.machines[machine] > n.machines[n.Machine] || n.Machine == "" {
+		if n.Machine != machine {
+			n.Machine = machine
+			if _, fresh := g.newNodes[n.ID]; !fresh {
+				g.dirtyNode[n.ID] = n
+			}
+		}
 	}
 }
 
@@ -180,7 +250,7 @@ func (g *Graph) Size() (nodes, edges int) {
 
 func nodeJSON(n *Node) protocol.Node {
 	return protocol.Node{
-		ID: n.ID, Ns: n.Key.Namespace, Kind: n.Key.Kind, Name: n.Key.Name, FQDN: n.FQDN,
+		ID: n.ID, Ns: n.Key.Namespace, Kind: n.Key.Kind, Name: n.Key.Name, FQDN: n.FQDN, Machine: n.Machine,
 		Labels: n.Labels, First: n.FirstSeen.UnixMilli(), Last: n.LastSeen.UnixMilli(),
 	}
 }
@@ -240,6 +310,7 @@ func (g *Graph) Tick(now time.Time) protocol.Tick {
 	for id, n := range g.nodes {
 		if n.edges <= 0 && n.LastSeen.Before(cutoff) {
 			delete(g.nodes, id)
+			delete(g.dirtyNode, id)
 			if _, fresh := g.newNodes[id]; fresh {
 				delete(g.newNodes, id)
 				continue
@@ -251,6 +322,11 @@ func (g *Graph) Tick(now time.Time) protocol.Tick {
 	t := protocol.Tick{T: "tick", Ts: now.UnixMilli()}
 	for _, n := range g.newNodes {
 		t.Nodes = append(t.Nodes, nodeJSON(n))
+	}
+	for id, n := range g.dirtyNode {
+		if _, fresh := g.newNodes[id]; !fresh {
+			t.Nodes = append(t.Nodes, nodeJSON(n))
+		}
 	}
 	for id, d := range g.dirty {
 		e := g.edges[id]
@@ -264,6 +340,7 @@ func (g *Graph) Tick(now time.Time) protocol.Tick {
 	t.Gone = protocol.Gone{Nodes: g.goneNodes, Edges: g.goneEdges}
 
 	g.newNodes = map[string]*Node{}
+	g.dirtyNode = map[string]*Node{}
 	g.dirty = map[string]*[4]uint64{}
 	g.dirtyL7 = map[string]bool{}
 	g.goneNodes = nil

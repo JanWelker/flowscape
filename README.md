@@ -25,10 +25,20 @@ counters per conversation, and pushes deltas to every browser ten times a
 second. The browser owns the layout, the rates, the time window and the
 particles, so the server holds no per-client state beyond the socket.
 
-Reserved Cilium identities (`world`, `host`, `remote-node`, `kube-apiserver`,
-`ingress`) are anchors on an outer ring; `world` is split by the DNS name the
-Hubble DNS proxy resolved, so `github.com` and `smtp.mailbox.org` are separate
-lights.
+Reserved Cilium identities (`world`, `kube-apiserver`, `ingress`) are anchors
+on an outer ring; `world` is split by the DNS name the Hubble DNS proxy
+resolved, so `github.com` and `smtp.mailbox.org` are separate lights.
+
+The cluster's machines come from the stream too. The agent that reports a
+flow runs on the source's node for egress and on the destination's for
+ingress, so every workload learns which node its pods run on, and the
+`host` and `remote-node` identities resolve to the machines themselves:
+`host` is the observing node, and a `remote-node` address is named as soon
+as a flow on that machine has shown it as `host`. The machines sit at the
+back of the outer ring next to the API server, each workload's halo carries
+its machine's tint, and **Group by → node** swaps the namespace platforms for
+one platform per machine, which turns the arcs between platforms into the
+traffic that actually crosses the network.
 
 ## Run it
 
@@ -88,7 +98,9 @@ would turn a data outage into a 502.
 | --- | --- |
 | Drag, scroll | Orbit and zoom; the scene auto-rotates until the first drag |
 | Click a light or an arc | Details: counters, rates over the window, ports, HTTP paths and DNS names seen at L7, drop reasons |
+| Group by | Platforms are namespaces or nodes; switching animates the regrouping and refits the view |
 | Namespace chips | Hide a namespace; alt-click shows only that one |
+| Node chips | Hover to highlight the workloads on that machine, click to hide them; a red dot marks a node Relay cannot reach |
 | Verdict and protocol chips | Hide arcs and sparks of that kind |
 | Window slider | 10 s to the retention; rates and the sparkline follow |
 | `space` | Pause; ticks are buffered for a minute, longer than that reconnects for a fresh snapshot |

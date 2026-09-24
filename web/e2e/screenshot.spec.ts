@@ -62,6 +62,24 @@ test("renders the demo cluster and takes the README screenshot", async ({ page }
   await page.keyboard.press("Escape");
   await expect(page.locator("#panel")).toBeHidden();
 
+  // Machines: chips, and the grouping switch regroups the platforms.
+  const before = await page.evaluate(() => window.flowscape.layout.platforms.size);
+  await expect(page.locator("#machines .chip").first()).toBeVisible();
+  const chips = await page.locator("#machines .chip").count();
+  expect(chips).toBeGreaterThanOrEqual(3);
+  await page.locator('#groupby button[data-mode="machine"]').click();
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => ({
+    platforms: window.flowscape.layout.platforms.size,
+    kinds: [...window.flowscape.layout.platforms.values()].map((p) => p.kind),
+    anchors: [...window.flowscape.state.nodes.values()].filter((n) => n.kind === "node").length,
+  }));
+  expect(after.platforms).not.toBe(before);
+  expect(after.kinds.every((k) => k === "machine")).toBe(true);
+  expect(after.anchors).toBeGreaterThanOrEqual(3);
+  await page.locator('#groupby button[data-mode="namespace"]').click();
+  await page.waitForTimeout(300);
+
   await page.keyboard.press("h");
   await expect(page.locator("#filters")).toHaveClass(/collapsed/);
   await expect(page.locator("#filters #ns")).toBeHidden();

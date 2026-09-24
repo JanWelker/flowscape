@@ -39,7 +39,15 @@ let layoutMovingUntil = 0;
 let selected: Pick = null;
 let gotSnapshot = false;
 const cameraPos = new Vector3();
-const sameNs = (src: string, dst: string) => src.split("/")[0] === dst.split("/")[0];
+/** Two workloads share a platform in the current grouping. */
+const samePlatform = (src: string, dst: string) => {
+  const a = state.nodes.get(src);
+  const b = state.nodes.get(dst);
+  if (!a || !b) return src.split("/")[0] === dst.split("/")[0];
+  if (a.ns === "reserved" || b.ns === "reserved") return false;
+  return layout.groupOf(a) === layout.groupOf(b);
+};
+const machines = new Set<string>();
 
 const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 const ws = new WSClient(
@@ -56,6 +64,8 @@ const ws = new WSClient(
     } else {
       state.applyTick(m);
       status = m.status;
+      nodes.setUnavailable(m.status.unavailable ?? []);
+      if (m.status.unavailable?.length) filters.syncMachines(machines, m.status.unavailable);
     }
   },
   (s) => {
@@ -74,11 +84,25 @@ function applyChanges(): void {
   }
   for (const id of c.removedEdges) edges.remove(id);
   for (const id of c.removedNodes) nodes.remove(id);
+  for (const id of c.touchedNodes) {
+    const n = state.nodes.get(id);
+    if (n?.machine) nodes.setMachine(id, n.machine);
+  }
   if (c.addedNodes.length || c.removedNodes.length || c.reset) membershipDirty = true;
+  if (c.touchedNodes.length && layout.groupBy === "machine") membershipDirty = true;
   if (membershipDirty) {
     layout.rebuild(state.nodes);
     platforms.sync(layout);
-    filters.syncNamespaces(layout.platforms.keys());
+    machines.clear();
+    for (const n of state.nodes.values()) {
+      if (n.machine) machines.add(n.machine);
+      if (n.ns === "reserved" && n.kind === "node") machines.add(n.name);
+    }
+    filters.syncMachines(machines, status?.unavailable ?? []);
+    filters.syncNamespaces(
+      new Set([...state.nodes.values()].filter((n) => n.ns !== "reserved").map((n) => n.ns)),
+    );
+    edges.setSame(samePlatform, state.edges);
     for (const [id, target] of layout.targets) {
       if (nodes.has(id)) nodes.setTarget(id, target);
       else {
@@ -91,13 +115,24 @@ function applyChanges(): void {
   }
   for (const id of c.addedEdges) {
     const e = state.edges.get(id);
-    if (e) edges.add(e, sameNs(e.src, e.dst));
+    if (e) edges.add(e, samePlatform(e.src, e.dst));
   }
   for (const s of c.sparks) {
     const slot = edges.slots.get(s.e);
     if (slot && !slot.hidden && filters.filters.verdicts[s.v])
       particles.spawn(slot.cp, s.v, s.v !== 0);
   }
+}
+
+/** A reserved machine anchor whose machine chip is switched off. */
+function machineAnchorHidden(id: string): boolean {
+  const n = state.nodes.get(id);
+  return (
+    n !== undefined &&
+    n.ns === "reserved" &&
+    n.kind === "node" &&
+    filters.filters.machines.has(n.name)
+  );
 }
 
 const rates = new Map<string, [number, number, number, number]>();
@@ -126,6 +161,9 @@ function refreshRates(force = false): void {
     const hidden =
       f.namespaces.has(srcNs) ||
       f.namespaces.has(dstNs) ||
+      f.machines.has(nodes.machineOf(e.src)) ||
+      f.machines.has(nodes.machineOf(e.dst)) ||
+      (f.machines.size > 0 && (machineAnchorHidden(e.src) || machineAnchorHidden(e.dst))) ||
       f.protocols.has(e.proto) ||
       (f.hideReserved && (srcNs === "reserved" || dstNs === "reserved")) ||
       total === 0;
@@ -141,17 +179,35 @@ function refreshRates(force = false): void {
     }
   }
   for (const n of state.nodes.values()) {
-    const hidden = f.namespaces.has(n.ns) || (f.hideReserved && n.ns === "reserved");
+    const hidden =
+      f.namespaces.has(n.ns) ||
+      (f.hideReserved && n.ns === "reserved") ||
+      (n.machine !== undefined && f.machines.has(n.machine)) ||
+      machineAnchorHidden(n.id);
     nodes.setHidden(n.id, hidden);
     nodes.setActivity(n.id, activity.get(n.id) ?? 0);
   }
-  for (const p of layout.platforms.keys()) platforms.setDimmed(p, f.namespaces.has(p));
+  for (const p of layout.platforms.values()) {
+    platforms.setDimmed(
+      p.group,
+      p.kind === "namespace" ? f.namespaces.has(p.group) : f.machines.has(p.group),
+    );
+  }
   panel.refresh(sec, f.windowSec);
 }
 
 filters.onChange = () => {
   ws.setPaused(filters.filters.paused);
+  if (layout.groupBy !== filters.filters.groupBy) {
+    layout.groupBy = filters.filters.groupBy;
+    membershipDirty = true;
+    applyChanges();
+    host.fit(layout.outerRadius + 6);
+  }
   refreshRates(true);
+};
+filters.onMachineHover = (name) => {
+  nodes.emphasisedMachine = name;
 };
 filters.onFit = () => host.fit(layout.outerRadius + 6);
 

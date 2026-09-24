@@ -9,7 +9,7 @@ import {
 } from "three";
 import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import type { Layout } from "./layout";
-import { namespaceColor } from "./theme";
+import { machineColor, namespaceColor } from "./theme";
 
 interface PlatformObjects {
   group: Group;
@@ -17,6 +17,7 @@ interface PlatformObjects {
   rim: Mesh<TorusGeometry, MeshBasicMaterial>;
   label: CSS2DObject;
   dimmed: boolean;
+  kind: "namespace" | "machine";
 }
 
 const discGeometry = new CylinderGeometry(1, 1, 0.08, 72, 1);
@@ -28,17 +29,18 @@ export class Platforms {
   private readonly items = new Map<string, PlatformObjects>();
 
   sync(layout: Layout): void {
-    for (const [ns, item] of this.items) {
-      if (!layout.platforms.has(ns)) {
+    for (const [key, item] of this.items) {
+      const p = layout.platforms.get(key);
+      if (!p || p.kind !== item.kind) {
         this.group.remove(item.group);
         item.label.element.remove();
-        this.items.delete(ns);
+        this.items.delete(key);
       }
     }
     for (const p of layout.platforms.values()) {
-      let item = this.items.get(p.ns);
+      let item = this.items.get(p.group);
       if (!item) {
-        const color = namespaceColor(p.ns);
+        const color = p.kind === "machine" ? machineColor(p.group) : namespaceColor(p.group);
         const disc = new Mesh(
           discGeometry,
           new MeshPhysicalMaterial({
@@ -53,7 +55,8 @@ export class Platforms {
         const rim = new Mesh(
           rimGeometry,
           new MeshBasicMaterial({
-            color: namespaceColor(p.ns, 0.9, 0.62),
+            color:
+              p.kind === "machine" ? machineColor(p.group) : namespaceColor(p.group, 0.9, 0.62),
             transparent: true,
             opacity: 0.9,
             blending: AdditiveBlending,
@@ -62,14 +65,14 @@ export class Platforms {
         );
         rim.rotation.x = Math.PI / 2;
         const el = document.createElement("div");
-        el.className = "ns-label";
-        el.textContent = p.ns;
+        el.className = "ns-label" + (p.kind === "machine" ? " machine" : "");
+        el.textContent = p.group;
         el.style.setProperty("--ns", `#${color.getHexString()}`);
         const label = new CSS2DObject(el);
         const group = new Group();
         group.add(disc, rim, label);
-        item = { group, disc, rim, label, dimmed: false };
-        this.items.set(p.ns, item);
+        item = { group, disc, rim, label, dimmed: false, kind: p.kind };
+        this.items.set(p.group, item);
         this.group.add(group);
       }
       item.group.position.set(p.center.x, 0, p.center.z);
@@ -79,8 +82,8 @@ export class Platforms {
     }
   }
 
-  setDimmed(ns: string, dimmed: boolean): void {
-    const item = this.items.get(ns);
+  setDimmed(group: string, dimmed: boolean): void {
+    const item = this.items.get(group);
     if (!item || item.dimmed === dimmed) return;
     item.dimmed = dimmed;
     item.disc.material.opacity = dimmed ? 0.03 : 0.16;

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { Layout } from "./layout";
 import type { NodeState } from "./graph-state";
 
-const mk = (id: string): [string, NodeState] => {
+const mk = (id: string, machine?: string): [string, NodeState] => {
   const [ns, kind, name] = id.split("/") as [string, string, string];
-  return [id, { id, ns, kind, name, first: 0, last: 0, edges: new Set() }];
+  return [id, { id, ns, kind, name, machine, first: 0, last: 0, edges: new Set() }];
 };
 
 describe("Layout", () => {
@@ -40,5 +40,30 @@ describe("Layout", () => {
     }
     const api = l.targets.get("reserved/kube-apiserver/kube-apiserver")!;
     expect(Math.hypot(api.x, api.z)).toBeGreaterThan(l.ringRadius);
+  });
+
+  it("regroups by machine and parks the unplaced last", () => {
+    const l = new Layout();
+    const nodes = new Map<string, NodeState>([
+      mk("a/Deployment/x", "w1"),
+      mk("b/Deployment/y", "w2"),
+      mk("b/Deployment/z", "w1"),
+      mk("c/Deployment/q"),
+      mk("reserved/node/w1"),
+      mk("reserved/node/w2"),
+      mk("reserved/kube-apiserver/kube-apiserver"),
+    ]);
+    l.rebuild(nodes);
+    expect([...l.platforms.keys()]).toEqual(["a", "b", "c"]);
+    l.groupBy = "machine";
+    l.rebuild(nodes);
+    expect([...l.platforms.keys()]).toEqual(["w1", "w2", "unplaced"]);
+    expect(l.platforms.get("w1")!.nodes).toEqual(["a/Deployment/x", "b/Deployment/z"]);
+    expect(l.platforms.get("w1")!.kind).toBe("machine");
+    for (const id of ["reserved/node/w1", "reserved/node/w2"]) {
+      const t = l.targets.get(id)!;
+      expect(Math.hypot(t.x, t.z)).toBeGreaterThan(l.ringRadius);
+      expect(t.z).toBeLessThan(0); // at the back, with the API server
+    }
   });
 });

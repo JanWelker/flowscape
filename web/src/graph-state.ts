@@ -6,6 +6,7 @@ export interface NodeState {
   kind: string;
   name: string;
   fqdn?: string;
+  machine?: string;
   labels?: Record<string, string>;
   first: number;
   last: number;
@@ -37,6 +38,8 @@ export interface Changes {
   removedEdges: string[];
   /** Edges whose counters or details moved. */
   touchedEdges: string[];
+  /** Nodes whose machine changed. */
+  touchedNodes: string[];
   sparks: Spark[];
   /** Latest tick timestamp in ms. */
   ts: number;
@@ -52,6 +55,7 @@ export class GraphState {
   private addedEdges = new Set<string>();
   private removedEdges = new Set<string>();
   private touchedEdges = new Set<string>();
+  private touchedNodes = new Set<string>();
   private sparks: Spark[] = [];
   private ts = 0;
   private reset = false;
@@ -68,6 +72,7 @@ export class GraphState {
     this.addedNodes.clear();
     this.addedEdges.clear();
     this.touchedEdges.clear();
+    this.touchedNodes.clear();
     for (const n of s.nodes) this.upsertNode(n);
     for (const e of s.edges) {
       const es = this.upsertEdge(e);
@@ -147,6 +152,7 @@ export class GraphState {
       addedEdges: [...this.addedEdges],
       removedEdges: [...this.removedEdges],
       touchedEdges: [...this.touchedEdges],
+      touchedNodes: [...this.touchedNodes],
       sparks: this.sparks,
       ts: this.ts,
       reset: this.reset,
@@ -156,6 +162,7 @@ export class GraphState {
     this.addedEdges.clear();
     this.removedEdges.clear();
     this.touchedEdges.clear();
+    this.touchedNodes.clear();
     this.sparks = [];
     this.reset = false;
     return c;
@@ -171,6 +178,10 @@ export class GraphState {
     } else {
       ns.last = Math.max(ns.last, n.last);
       if (n.labels) ns.labels = n.labels;
+      if (n.machine && n.machine !== ns.machine) {
+        ns.machine = n.machine;
+        this.touchedNodes.add(n.id);
+      }
     }
     return ns;
   }
@@ -213,6 +224,7 @@ export class GraphState {
 
   private removeNode(id: string): void {
     if (!this.nodes.delete(id)) return;
+    this.touchedNodes.delete(id);
     if (!this.addedNodes.delete(id)) this.removedNodes.add(id);
   }
 

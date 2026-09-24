@@ -22,6 +22,8 @@ export interface WireNode {
   kind: string;
   name: string;
   fqdn?: string;
+  /** Cluster node the workload's pods run on; empty for reserved entities. */
+  machine?: string;
   labels?: Record<string, string>;
   first: number;
   last: number;

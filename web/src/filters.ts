@@ -1,8 +1,12 @@
 import type { ConnState } from "./ws-client";
 import type { Status } from "./protocol";
-import { namespaceColor } from "./theme";
+import { machineColor, namespaceColor } from "./theme";
+
+export type GroupBy = "namespace" | "machine";
 
 export interface Filters {
+  groupBy: GroupBy;
+  machines: Set<string>; // hidden machines
   namespaces: Set<string>; // disabled namespaces
   verdicts: [boolean, boolean, boolean, boolean];
   protocols: Set<string>; // disabled protocols
@@ -19,17 +23,22 @@ export class FiltersPanel {
   readonly filters: Filters;
   private readonly root: HTMLElement;
   private readonly chips = new Map<string, HTMLButtonElement>();
+  private readonly machineChips = new Map<string, HTMLButtonElement>();
   private readonly nsBox: HTMLElement;
+  private readonly machineBox: HTMLElement;
   private readonly pill: HTMLElement;
   private readonly pauseBtn: HTMLButtonElement;
   private readonly windowLabel: HTMLElement;
   private readonly help: HTMLElement;
   onChange: () => void = () => {};
   onFit: () => void = () => {};
+  onMachineHover: (name: string | null) => void = () => {};
 
   constructor(root: HTMLElement, windowSec: number) {
     this.root = root;
     this.filters = {
+      groupBy: "namespace",
+      machines: new Set(),
       namespaces: new Set(),
       verdicts: [true, true, true, true],
       protocols: new Set(),
@@ -44,7 +53,15 @@ export class FiltersPanel {
       </div>
       <div class="pill" id="pill"><span class="dot"></span><span class="text">connecting</span></div>
       <div class="body">
+      <section>
+        <h2>Group by</h2>
+        <div class="segmented" id="groupby">
+          <button data-mode="namespace" class="on">namespace</button>
+          <button data-mode="machine">node</button>
+        </div>
+      </section>
       <section><h2>Namespaces</h2><div class="chips" id="ns"></div></section>
+      <section><h2>Nodes</h2><div class="chips" id="machines"></div></section>
       <section><h2>Verdicts</h2><div class="chips" id="verdicts"></div></section>
       <section><h2>Protocols</h2><div class="chips" id="protocols"></div></section>
       <section class="row">
@@ -72,6 +89,14 @@ export class FiltersPanel {
     }
     this.setCollapsed(collapsed, false);
     this.nsBox = root.querySelector("#ns")!;
+    this.machineBox = root.querySelector("#machines")!;
+    root.querySelectorAll<HTMLButtonElement>("#groupby button").forEach((b) => {
+      b.onclick = () => {
+        this.filters.groupBy = b.dataset.mode as GroupBy;
+        root.querySelectorAll("#groupby button").forEach((o) => o.classList.toggle("on", o === b));
+        this.onChange();
+      };
+    });
     this.pill = root.querySelector("#pill")!;
     this.pauseBtn = root.querySelector("#pause")!;
     this.windowLabel = root.querySelector("#window-label")!;
@@ -187,6 +212,43 @@ export class FiltersPanel {
       // Keep alphabetical order.
       const after = [...this.chips.keys()].sort().indexOf(ns);
       this.nsBox.insertBefore(b, this.nsBox.children[after] ?? null);
+    }
+  }
+
+  /** One chip per machine seen; unavailable ones carry a red dot. */
+  syncMachines(names: Iterable<string>, unavailable: string[]): void {
+    const want = new Set(names);
+    const down = new Set(unavailable);
+    for (const [m, chip] of this.machineChips) {
+      if (!want.has(m)) {
+        chip.remove();
+        this.machineChips.delete(m);
+      }
+    }
+    for (const m of [...want].sort()) {
+      let b = this.machineChips.get(m);
+      if (!b) {
+        b = document.createElement("button");
+        b.className = "chip on machine";
+        b.textContent = m;
+        b.style.setProperty("--ns", `#${machineColor(m).getHexString()}`);
+        const name = m;
+        b.onclick = () => {
+          if (this.filters.machines.has(name)) this.filters.machines.delete(name);
+          else this.filters.machines.add(name);
+          b!.classList.toggle("on", !this.filters.machines.has(name));
+          this.onChange();
+        };
+        b.onpointerenter = () => this.onMachineHover(name);
+        b.onpointerleave = () => this.onMachineHover(null);
+        this.machineChips.set(m, b);
+        const after = [...this.machineChips.keys()].sort().indexOf(m);
+        this.machineBox.insertBefore(b, this.machineBox.children[after] ?? null);
+      }
+      b.classList.toggle("down", down.has(m));
+      b.title = down.has(m)
+        ? `${m}: Hubble Relay cannot reach this node`
+        : `${m}: click to hide, hover to highlight`;
     }
   }
 

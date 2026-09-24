@@ -450,3 +450,44 @@ button {
 #filters.collapsed .body {
   display: none;
 }
+
+/* Group-by switch and machine chips */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.segmented button {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented button.on {
+  background: rgba(53, 214, 255, 0.18);
+  color: var(--accent);
+}
+.chip.machine.on {
+  border-color: var(--ns);
+  color: var(--ns);
+  background: color-mix(in srgb, var(--ns) 14%, transparent);
+}
+.chip.machine.down::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v1);
+  box-shadow: 0 0 6px var(--v1);
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.ns-label.machine {
+  font-style: italic;
+  letter-spacing: 0.05em;
+}

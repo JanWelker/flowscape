@@ -47,8 +47,11 @@ var workloadKinds = map[string]string{
 }
 
 // endpointKey derives the node for one side of a flow. names are the DNS
-// names Hubble resolved for that side, ip its address.
-func endpointKey(ep *flow.Endpoint, names []string, ip string) NodeKey {
+// names Hubble resolved for that side, ip its address, observer the node
+// whose agent saw the flow, and nodeIPs the machine addresses learned so
+// far: a reserved host is the observer itself, a remote-node is looked up
+// by address and stays an address until some flow on that machine names it.
+func endpointKey(ep *flow.Endpoint, names []string, ip, observer string, nodeIPs map[string]string, learned func(ip string)) NodeKey {
 	if ep == nil {
 		return NodeKey{"unknown", "ip", ip}
 	}
@@ -91,6 +94,27 @@ func endpointKey(ep *flow.Endpoint, names []string, ip string) NodeKey {
 			name = cidr
 		}
 		return NodeKey{ReservedNamespace, "world", name}
+	case "host":
+		if observer != "" {
+			if ip != "" && nodeIPs != nil {
+				if _, known := nodeIPs[ip]; !known {
+					nodeIPs[ip] = observer
+					if learned != nil {
+						learned(ip)
+					}
+				}
+			}
+			return NodeKey{ReservedNamespace, "node", observer}
+		}
+		return NodeKey{ReservedNamespace, "host", "host"}
+	case "remote-node":
+		if name, ok := nodeIPs[ip]; ok {
+			return NodeKey{ReservedNamespace, "node", name}
+		}
+		if ip != "" {
+			return NodeKey{ReservedNamespace, "remote-node", ip}
+		}
+		return NodeKey{ReservedNamespace, "remote-node", "remote-node"}
 	default:
 		return NodeKey{ReservedNamespace, reserved, reserved}
 	}

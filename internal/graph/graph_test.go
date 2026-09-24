@@ -54,9 +54,28 @@ func TestEndpointKey(t *testing.T) {
 		{"unknown", &flow.Endpoint{}, nil, "9.9.9.9", NodeKey{"unknown", "ip", "9.9.9.9"}},
 	}
 	for _, c := range cases {
-		if got := endpointKey(c.ep, c.names, c.ip); got != c.want {
+		if got := endpointKey(c.ep, c.names, c.ip, "", nil, nil); got != c.want {
 			t.Errorf("%s: got %+v want %+v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestEndpointKeyMachines(t *testing.T) {
+	ips := map[string]string{}
+	host := &flow.Endpoint{Labels: []string{"reserved:host"}}
+	remote := &flow.Endpoint{Labels: []string{"reserved:remote-node"}}
+	if got := endpointKey(host, nil, "10.9.2.11", "cp1", ips, nil); got != (NodeKey{"reserved", "node", "cp1"}) {
+		t.Errorf("host = %+v", got)
+	}
+	if got := endpointKey(remote, nil, "10.9.2.12", "cp1", ips, nil); got != (NodeKey{"reserved", "remote-node", "10.9.2.12"}) {
+		t.Errorf("unknown remote = %+v", got)
+	}
+	endpointKey(host, nil, "10.9.2.12", "cp2", ips, nil)
+	if got := endpointKey(remote, nil, "10.9.2.12", "cp1", ips, nil); got != (NodeKey{"reserved", "node", "cp2"}) {
+		t.Errorf("learned remote = %+v", got)
+	}
+	if got := endpointKey(host, nil, "", "", nil, nil); got != (NodeKey{"reserved", "host", "host"}) {
+		t.Errorf("host without observer = %+v", got)
 	}
 }
 
@@ -101,10 +120,10 @@ func TestIngestFixture(t *testing.T) {
 		"monitoring/StatefulSet/prometheus-kube-prometheus-stack-prometheus",
 		"nextcloud/Cluster/nextcloud-db",
 		"nextcloud/Deployment/nextcloud",
-		"reserved/host/host",
 		"reserved/ingress/ingress",
 		"reserved/kube-apiserver/kube-apiserver",
-		"reserved/remote-node/remote-node",
+		"reserved/node/node1",
+		"reserved/remote-node/10.9.2.12",
 		"reserved/world/github.com",
 		"reserved/world/world",
 	}
@@ -137,7 +156,7 @@ func TestIngestFixture(t *testing.T) {
 	if d.L7 == nil || d.L7.DNS["auth.k8s.wlkr.ch"] != 1 {
 		t.Errorf("dns l7 = %+v", d.L7)
 	}
-	icmp := findEdge(t, s.Edges, "reserved/remote-node/remote-node|nextcloud/Deployment/nextcloud|ICMP|8")
+	icmp := findEdge(t, s.Edges, "reserved/remote-node/10.9.2.12|nextcloud/Deployment/nextcloud|ICMP|8")
 	if icmp.F != 1 {
 		t.Errorf("icmp edge = %+v", icmp)
 	}
@@ -147,6 +166,55 @@ func TestIngestFixture(t *testing.T) {
 	}
 	if findNode(t, s.Nodes, "reserved/world/github.com").FQDN != "github.com" {
 		t.Error("world fqdn not set")
+	}
+	if m := findNode(t, s.Nodes, "nextcloud/Deployment/nextcloud").Machine; m != "node1" {
+		t.Errorf("nextcloud machine = %q, want node1 (egress observed there)", m)
+	}
+	if m := findNode(t, s.Nodes, "authentik/Deployment/authentik-server").Machine; m != "node2" {
+		t.Errorf("authentik machine = %q, want node2 (ingress from the Gateway observed there)", m)
+	}
+	if m := findNode(t, s.Nodes, "reserved/node/node1").Machine; m != "" {
+		t.Errorf("reserved anchor carries a machine: %q", m)
+	}
+}
+
+func TestAddressAnchorRetiredWhenNamed(t *testing.T) {
+	flows := loadFixture(t)
+	g := New(5 * time.Minute)
+	g.Ingest(flows[10]) // remote-node 10.9.2.12 -> nextcloud, ICMP, observed on node1
+	if n, _ := g.Size(); n != 2 {
+		t.Fatalf("nodes = %d", n)
+	}
+	g.Tick(time.Date(2026, 9, 24, 10, 0, 9, 0, time.UTC))
+	// A host flow observed on node2 with that address names the machine.
+	named := proto.Clone(flows[7]).(*flow.Flow) // host -> nextcloud
+	named.NodeName = "node2"
+	named.IP.Source = "10.9.2.12"
+	g.Ingest(named)
+	tk := g.Tick(time.Date(2026, 9, 24, 10, 0, 10, 0, time.UTC))
+	if len(tk.Gone.Nodes) != 1 || tk.Gone.Nodes[0] != "reserved/remote-node/10.9.2.12" || len(tk.Gone.Edges) != 1 {
+		t.Fatalf("gone = %+v", tk.Gone)
+	}
+	if len(tk.Nodes) != 1 || tk.Nodes[0].ID != "reserved/node/node2" {
+		t.Fatalf("new nodes = %+v", tk.Nodes)
+	}
+	g.Ingest(flows[10]) // the same ICMP flow now lands on the named machine
+	s := g.Snapshot(time.Date(2026, 9, 24, 10, 0, 11, 0, time.UTC))
+	findEdge(t, s.Edges, "reserved/node/node2|nextcloud/Deployment/nextcloud|ICMP|8")
+}
+
+func TestMachineChangeIsSentInTick(t *testing.T) {
+	flows := loadFixture(t)
+	g := New(5 * time.Minute)
+	g.Ingest(flows[0]) // nextcloud egress on node1
+	g.Tick(time.Date(2026, 9, 24, 10, 0, 1, 0, time.UTC))
+	moved := proto.Clone(flows[0]).(*flow.Flow)
+	moved.NodeName = "node2"
+	g.Ingest(moved)
+	g.Ingest(moved)
+	tk := g.Tick(time.Date(2026, 9, 24, 10, 0, 2, 0, time.UTC))
+	if len(tk.Nodes) != 1 || tk.Nodes[0].ID != "nextcloud/Deployment/nextcloud" || tk.Nodes[0].Machine != "node2" {
+		t.Fatalf("tick nodes = %+v", tk.Nodes)
 	}
 }
 

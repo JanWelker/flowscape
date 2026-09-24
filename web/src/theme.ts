@@ -35,6 +35,12 @@ export function namespaceColor(ns: string, s = 0.7, l = 0.6): Color {
 }
 
 /** Blend the verdict colours by their share of an edge's traffic. */
+/** Machines get a second, paler family of hues so a halo tint never
+ * reads as a namespace. */
+export function machineColor(name: string): Color {
+  return new Color().setHSL((namespaceHue(name) + 0.37) % 1, 0.5, 0.72);
+}
+
 export function verdictColor(f: number, d: number, a: number, e: number, out = new Color()): Color {
   const total = f + d + a + e;
   if (total <= 0) return out.copy(theme.forwarded);

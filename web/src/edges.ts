@@ -172,6 +172,16 @@ export class Edges {
     }
   }
 
+  /** Re-evaluate which arcs stay low after the platforms regroup. */
+  setSame(same: (src: string, dst: string) => boolean, edges: Map<string, EdgeState>): void {
+    for (const slot of this.slots.values()) {
+      const e = edges.get(slot.id);
+      if (!e) continue;
+      slot.same = same(e.src, e.dst);
+      this.cpValid[slot.cp] = 0;
+    }
+  }
+
   setColor(id: string, f: number, d: number, a: number, e: number, alpha: number): void {
     const slot = this.slots.get(id);
     if (!slot) return;

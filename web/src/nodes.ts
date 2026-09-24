@@ -14,7 +14,7 @@ import {
 import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import type { NodeState } from "./graph-state";
 import type { Vec3 } from "./layout";
-import { namespaceColor, theme } from "./theme";
+import { machineColor, namespaceColor, theme } from "./theme";
 
 const CAPACITY = 2048;
 const LERP = 6;
@@ -31,7 +31,13 @@ interface Slot {
   label: CSS2DObject | null;
   labelText: string;
   base: Color;
+  /** Cluster node the workload runs on; halo tint. */
+  machine: string;
+  /** Reserved machine anchor Relay cannot reach. */
+  unavailable: boolean;
 }
+
+const red = new Color("#ff3b5c");
 
 const dummy = new Object3D();
 const tmpColor = new Color();
@@ -49,6 +55,8 @@ export class Nodes {
   private labelBudget = 40;
   selected: string | null = null;
   hovered: string | null = null;
+  /** Machine whose workloads are emphasised, null for none. */
+  emphasisedMachine: string | null = null;
 
   constructor() {
     for (let i = CAPACITY - 1; i >= 0; i--) this.free.push(i);
@@ -124,8 +132,10 @@ export class Nodes {
       activity: 0.4,
       hidden: false,
       label: null,
-      labelText: reserved ? n.name : n.name,
+      labelText: n.name,
       base: reserved ? theme.reserved.clone() : namespaceColor(n.ns, 0.8, 0.62),
+      machine: n.machine ?? "",
+      unavailable: false,
     };
     this.positions[index * 3] = target.x;
     this.positions[index * 3 + 1] = target.y + 6; // drop in from above
@@ -167,6 +177,23 @@ export class Nodes {
     if (slot) slot.hidden = h;
   }
 
+  setMachine(id: string, machine: string): void {
+    const slot = this.slots.get(id);
+    if (slot) slot.machine = machine;
+  }
+
+  machineOf(id: string): string {
+    return this.slots.get(id)?.machine ?? "";
+  }
+
+  /** Mark the reserved anchors of machines Relay lost. */
+  setUnavailable(names: string[]): void {
+    const set = new Set(names);
+    for (const slot of this.slots.values()) {
+      if (slot.reserved) slot.unavailable = set.has(slot.labelText);
+    }
+  }
+
   /** Current (lerped) position of a node. */
   positionOf(id: string, out: Vector3): boolean {
     const slot = this.slots.get(id);
@@ -191,10 +218,17 @@ export class Nodes {
       const x = this.positions[i]!;
       const y = this.positions[i + 1]!;
       const z = this.positions[i + 2]!;
-      const emphasised = slot.id === this.selected || slot.id === this.hovered;
+      const onMachine =
+        this.emphasisedMachine !== null &&
+        (slot.machine === this.emphasisedMachine ||
+          (slot.reserved && slot.labelText === this.emphasisedMachine));
+      const emphasised = slot.id === this.selected || slot.id === this.hovered || onMachine;
+      const dimmed = this.emphasisedMachine !== null && !onMachine;
       const s = slot.hidden
         ? 0
-        : (slot.reserved ? 1 : 0.75 + slot.activity * 0.9) * (emphasised ? 1.35 : 1);
+        : (slot.reserved ? 1 : 0.75 + slot.activity * 0.9) *
+          (emphasised ? 1.35 : 1) *
+          (dimmed ? 0.7 : 1);
       dummy.position.set(x, y, z);
       dummy.scale.setScalar(s);
       dummy.rotation.set(0, 0, 0);
@@ -206,10 +240,16 @@ export class Nodes {
       dummy.scale.setScalar(s * (1.9 + slot.activity * 1.2));
       dummy.updateMatrix();
       this.halo.setMatrixAt(slot.index, slot.hidden || slot.reserved ? hidden : dummy.matrix);
-      tmpColor.copy(slot.base);
+      tmpColor.copy(slot.unavailable ? red : slot.base);
       if (emphasised) tmpColor.lerp(new Color(1, 1, 1), 0.7);
-      else tmpColor.multiplyScalar(0.55 + slot.activity * 0.9);
+      else tmpColor.multiplyScalar((0.55 + slot.activity * 0.9) * (dimmed ? 0.35 : 1));
       target.setColorAt(slot.index, tmpColor);
+      // The halo carries the machine's tint, the core the namespace hue.
+      if (slot.machine && !emphasised) {
+        tmpColor
+          .copy(machineColor(slot.machine))
+          .multiplyScalar((0.5 + slot.activity * 0.8) * (dimmed ? 0.35 : 1));
+      }
       this.halo.setColorAt(slot.index, tmpColor);
       if (!slot.hidden) {
         const d2 = (cameraPos.x - x) ** 2 + (cameraPos.y - y) ** 2 + (cameraPos.z - z) ** 2;

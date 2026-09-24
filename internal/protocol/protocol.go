@@ -23,14 +23,17 @@ type Hello struct {
 
 // Node is a workload, pod or reserved entity.
 type Node struct {
-	ID     string            `json:"id"`
-	Ns     string            `json:"ns"`
-	Kind   string            `json:"kind"`
-	Name   string            `json:"name"`
-	FQDN   string            `json:"fqdn,omitempty"`
-	Labels map[string]string `json:"labels,omitempty"`
-	First  int64             `json:"first"`
-	Last   int64             `json:"last"`
+	ID   string `json:"id"`
+	Ns   string `json:"ns"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	FQDN string `json:"fqdn,omitempty"`
+	// Machine is the cluster node the workload's pods run on, learned from
+	// which agent observes its flows. Empty for reserved entities.
+	Machine string            `json:"machine,omitempty"`
+	Labels  map[string]string `json:"labels,omitempty"`
+	First   int64             `json:"first"`
+	Last    int64             `json:"last"`
 }
 
 // Bucket is one second of counters: [unixSec, forwarded, dropped, audit, error].

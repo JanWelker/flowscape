@@ -59,7 +59,7 @@ export class Panel {
       this.root.innerHTML = `
         <header><span class="kind">${esc(n.kind)}</span><button class="close" title="esc">×</button></header>
         <h2>${esc(n.name)}</h2>
-        <div class="sub">${esc(n.ns)}${n.fqdn ? ` · ${esc(n.fqdn)}` : ""}</div>
+        <div class="sub">${esc(n.ns)}${n.fqdn ? ` · ${esc(n.fqdn)}` : ""}${n.machine ? ` · on ${esc(n.machine)}` : ""}</div>
         <div class="tags">${labels}</div>
         <div class="kv"><span>first seen</span><span>${ago(n.first)}</span><span>last seen</span><span>${ago(n.last)}</span></div>
         <h3>Conversations</h3>

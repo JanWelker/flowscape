@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cilium/cilium/api/v1/flow"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -28,9 +29,12 @@ type Source struct {
 func (s *Source) Name() string { return "demo" }
 
 type endpoint struct {
-	ep    *flow.Endpoint
-	ip    string
-	names []string
+	ep      *flow.Endpoint
+	ip      string
+	names   []string
+	machine string // the cluster node a workload's pod runs on
+	host    bool   // reserved host: takes the peer's machine
+	remote  bool   // reserved remote-node: takes another machine
 }
 
 type conv struct {
@@ -61,16 +65,22 @@ func (s *Source) build() []*conv {
 			if w.kind == "Cluster" || w.kind == "StatefulSet" {
 				pod = w.name + "-1"
 			}
+			machine := nodeNames[(i*7+r*3)%len(nodeNames)]
+			if w.kind == "DaemonSet" {
+				machine = nodeNames[r%len(nodeNames)]
+			}
 			eps[fmt.Sprintf("%s/%s", ns, w.name)] = endpoint{
 				ep: &flow.Endpoint{Identity: identity, Namespace: ns, PodName: pod, Labels: labels,
 					Workloads: []*flow.Workload{{Name: w.name, Kind: w.kind}}},
-				ip: fmt.Sprintf("10.244.%d.%d", (i/8+r)%250+1, i%250+2),
+				ip:      fmt.Sprintf("10.244.%d.%d", (i/8+r)%250+1, i%250+2),
+				machine: machine,
 			}
 		}
 	}
 	reservedIdentity := map[string]uint32{"host": 1, "world": 2, "remote-node": 6, "kube-apiserver": 7, "ingress": 8}
 	for _, r := range reservedEndpoints {
-		eps["reserved/"+r.name] = endpoint{ep: &flow.Endpoint{Identity: reservedIdentity[r.name], Labels: []string{"reserved:" + r.name}}, ip: r.ip}
+		eps["reserved/"+r.name] = endpoint{ep: &flow.Endpoint{Identity: reservedIdentity[r.name], Labels: []string{"reserved:" + r.name}}, ip: r.ip,
+			host: r.name == "host", remote: r.name == "remote-node"}
 	}
 	world := func(name string) endpoint {
 		e := endpoint{ep: &flow.Endpoint{Identity: 2, Labels: []string{"reserved:world"}}, ip: "203.0.113.7"}
@@ -83,6 +93,17 @@ func (s *Source) build() []*conv {
 		return e
 	}
 	var out []*conv
+	// The kubelet probes every pod from its own node, so each machine is
+	// seen as host at least once; that is what names the address anchors.
+	probed := map[string]bool{}
+	for key, e := range eps {
+		if e.machine == "" || probed[e.machine] {
+			continue
+		}
+		probed[e.machine] = true
+		out = append(out, &conv{conversation: conversation{src: "reserved/host", dst: key, proto: "TCP", port: 8080, rate: 0.5},
+			src: eps["reserved/host"], dst: e, acc: rand.Float64()})
+	}
 	for r := 1; r <= scale; r++ {
 		for _, c := range conversations {
 			resolve := func(key string) endpoint {
@@ -99,6 +120,15 @@ func (s *Source) build() []*conv {
 		}
 	}
 	return out
+}
+
+func indexOf(node string) int {
+	for i, n := range nodeNames {
+		if n == node {
+			return i
+		}
+	}
+	return 0
 }
 
 func hash(n uint64) string {
@@ -156,7 +186,16 @@ func (s *Source) Run(ctx context.Context, sink hubble.Sink) error {
 				c.acc += rate * step.Seconds()
 				for c.acc >= 1 {
 					c.acc--
-					sink.Flow(s.flow(rng, c, now, storm))
+					f := s.flow(rng, c, now, storm)
+					sink.Flow(f)
+					// Hubble reports a pod-to-pod flow twice: egress on the
+					// source's node and ingress on the destination's.
+					if c.dst.machine != "" && c.src.machine != "" && f.GetVerdict() == flow.Verdict_FORWARDED {
+						in := proto.Clone(f).(*flow.Flow)
+						in.NodeName = c.dst.machine
+						in.TrafficDirection = flow.TrafficDirection_INGRESS
+						sink.Flow(in)
+					}
 				}
 			}
 		}
@@ -180,18 +219,49 @@ func (s *Source) flow(rng *rand.Rand, c *conv, now time.Time, storm bool) *flow.
 	case p < c.drop+audit:
 		verdict = flow.Verdict_AUDIT
 	}
+	// The observing agent is the source's machine; a reserved host is that
+	// same machine, a remote-node is another one, so the addresses line up
+	// with what the graph learns from real flows.
+	observer := c.src.machine
+	if observer == "" {
+		observer = c.dst.machine
+	}
+	if observer == "" {
+		observer = nodeNames[rng.IntN(len(nodeNames))]
+	}
+	srcIP, dstIP := c.src.ip, c.dst.ip
+	direction := flow.TrafficDirection_EGRESS
+	if c.src.host {
+		srcIP = nodeIPs[observer]
+		direction = flow.TrafficDirection_INGRESS
+	}
+	if c.dst.host {
+		dstIP = nodeIPs[observer]
+	}
+	if c.dst.remote {
+		other := nodeNames[rng.IntN(len(nodeNames))]
+		if other == observer {
+			other = nodeNames[(rng.IntN(len(nodeNames)-1)+1+indexOf(observer))%len(nodeNames)]
+		}
+		dstIP = nodeIPs[other]
+	}
+	if c.src.remote {
+		other := nodeNames[(rng.IntN(len(nodeNames)-1)+1+indexOf(observer))%len(nodeNames)]
+		srcIP = nodeIPs[other]
+		direction = flow.TrafficDirection_INGRESS
+	}
 	f := &flow.Flow{
 		Time:             timestamppb.New(now),
 		Verdict:          verdict,
 		DropReasonDesc:   drop,
-		IP:               &flow.IP{Source: c.src.ip, Destination: c.dst.ip, IpVersion: flow.IPVersion_IPv4},
+		IP:               &flow.IP{Source: srcIP, Destination: dstIP, IpVersion: flow.IPVersion_IPv4},
 		Source:           c.src.ep,
 		Destination:      c.dst.ep,
 		DestinationNames: c.dst.names,
 		Type:             flow.FlowType_L3_L4,
-		NodeName:         nodeNames[rng.IntN(len(nodeNames))],
+		NodeName:         observer,
 		IsReply:          wrapperspb.Bool(false),
-		TrafficDirection: flow.TrafficDirection_EGRESS,
+		TrafficDirection: direction,
 		EventType:        &flow.CiliumEventType{Type: 4, SubType: 3},
 	}
 	sport := uint32(32768 + rng.IntN(28000))
