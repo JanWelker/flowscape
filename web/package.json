@@ -18,7 +18,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
-    "@types/three": "^0.186.0",
+    "@types/three": "0.186.0",
     "eslint": "^10.11.0",
     "prettier": "^3.9.0",
     "typescript": "^5.9.0",
