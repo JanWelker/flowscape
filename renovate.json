@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "platformAutomerge": true,
+  "extends": [
+    "config:best-practices",
+    ":dependencyDashboard",
+    ":prHourlyLimitNone",
+    ":prConcurrentLimitNone",
+    ":timezone(Europe/Berlin)"
+  ],
+  "labels": ["dependencies"],
+  "schedule": "at any time",
+  "postUpdateOptions": ["gomodTidy"],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "Same policy as the homelab repositories: patch and minor automerge, majors wait for a human.",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    },
+    {
+      "description": "Major updates always require review.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "Three days between a release and its PR, long enough for an upstream to pull a broken or compromised tag.",
+      "matchDatasources": ["docker", "npm", "go", "github-releases", "github-tags"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "three and its types move together or the build breaks.",
+      "matchPackageNames": ["three", "@types/three"],
+      "groupName": "three"
+    },
+    {
+      "description": "The Hubble API follows the cluster's Cilium minor; bump it by hand together with the platform chart.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["github.com/cilium/cilium"],
+      "matchUpdateTypes": ["minor", "major"],
+      "enabled": false
+    }
+  ]
+}

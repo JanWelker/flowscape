@@ -1,0 +1,14 @@
+# Runs the built image the way the cluster does: read-only root, non-root,
+# no capabilities. `container compose` or `docker compose` both read this.
+services:
+  flowscape:
+    build: .
+    image: ghcr.io/janwelker/flowscape:dev
+    command: ["--demo"]
+    ports:
+      - "8080:8080"
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
