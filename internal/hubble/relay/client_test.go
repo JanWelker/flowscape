@@ -86,7 +86,9 @@ func flowAt(t time.Time) *observer.GetFlowsResponse {
 }
 
 func TestReconnectResumesFromLastFlow(t *testing.T) {
-	t0 := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	// Ahead of the client's warm-up window (now minus Window), otherwise a
+	// flow older than the window would rightly not move `since`.
+	t0 := time.Now().Add(time.Hour).Truncate(time.Second)
 	obs := &fakeObserver{plan: []*fakeStream{
 		{items: []*observer.GetFlowsResponse{flowAt(t0), flowAt(t0.Add(time.Second)),
 			{ResponseTypes: &observer.GetFlowsResponse_NodeStatus{NodeStatus: &relay.NodeStatusEvent{StateChange: relay.NodeState_NODE_UNAVAILABLE, NodeNames: []string{"w3"}}}}},

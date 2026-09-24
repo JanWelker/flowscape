@@ -69,6 +69,16 @@
         "major"
       ],
       "enabled": false
+    },
+    {
+      "description": "TypeScript stays on the 6.x line: typescript-eslint's peer range ends at 6.0, and 7 is the Go port, a migration of its own.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<7"
     }
   ],
   "customManagers": [
