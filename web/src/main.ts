@@ -10,7 +10,8 @@ import { Particles } from "./particles";
 import { Picking, type Pick } from "./picking";
 import { Platforms } from "./platforms";
 import { SceneHost } from "./scene";
-import { WSClient, type ConnState } from "./ws-client";
+import { DemoTransport } from "./demo-transport";
+import { WSClient, type ConnState, type Transport } from "./ws-client";
 import type { Message, Status } from "./protocol";
 
 const app = document.getElementById("app")!;
@@ -49,29 +50,36 @@ const samePlatform = (src: string, dst: string) => {
 };
 const machines = new Set<string>();
 
+const staticDemo = import.meta.env.VITE_STATIC_DEMO === "1";
+const onMessage = (m: Message) => {
+  if (m.t === "hello") {
+    clockOffset = m.server_time - Date.now();
+    state.retention = m.retention_s;
+    filters.setMaxWindow(m.retention_s);
+    document.title = `Flowscape · ${m.source}`;
+  } else if (m.t === "snapshot") {
+    state.applySnapshot(m);
+    gotSnapshot = true;
+  } else {
+    state.applyTick(m);
+    status = m.status;
+    nodes.setUnavailable(m.status.unavailable ?? []);
+    if (m.status.unavailable?.length) filters.syncMachines(machines, m.status.unavailable);
+  }
+};
+const onState = (s: ConnState) => {
+  conn = s;
+};
 const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
-const ws = new WSClient(
-  wsUrl,
-  (m: Message) => {
-    if (m.t === "hello") {
-      clockOffset = m.server_time - Date.now();
-      state.retention = m.retention_s;
-      filters.setMaxWindow(m.retention_s);
-      document.title = `Flowscape · ${m.source}`;
-    } else if (m.t === "snapshot") {
-      state.applySnapshot(m);
-      gotSnapshot = true;
-    } else {
-      state.applyTick(m);
-      status = m.status;
-      nodes.setUnavailable(m.status.unavailable ?? []);
-      if (m.status.unavailable?.length) filters.syncMachines(machines, m.status.unavailable);
-    }
-  },
-  (s) => {
-    conn = s;
-  },
-);
+const ws: Transport = staticDemo
+  ? new DemoTransport(import.meta.env.BASE_URL, onMessage, onState)
+  : new WSClient(wsUrl, onMessage, onState);
+if (staticDemo) {
+  filters.setBanner(
+    "A demo cluster, generated in your browser by the same Go code the server runs. " +
+      '<a href="https://github.com/JanWelker/flowscape">Run it against Hubble</a>.',
+  );
+}
 ws.connect();
 
 const nowSec = () => Math.floor((Date.now() + clockOffset) / 1000);

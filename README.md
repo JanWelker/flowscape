@@ -9,6 +9,10 @@ audit mode would have.
 
 ![Flowscape showing a demo cluster](docs/screenshot.png)
 
+**[Live demo](https://janwelker.github.io/flowscape/)**: the demo source and
+the graph compiled to WebAssembly, running in your browser on a synthetic
+homelab cluster. Same code as the server, minus the WebSocket.
+
 ## How it works
 
 ```mermaid
@@ -115,7 +119,8 @@ make dev        # go run --demo on :8080 plus Vite with hot reload on :5173
 make test       # go vet, go test -race, vitest
 make lint       # golangci-lint, eslint
 make web        # build the frontend into web/dist; the Go binary embeds it
-make e2e        # Playwright: boots --demo, checks WebGL, picking and the panel, writes docs/screenshot.png
+make pages      # the GitHub Pages demo: Go demo source as WebAssembly plus the frontend
+make e2e        # Playwright: the server build and the pages build, writes docs/screenshot.png
 make image      # container build with Apple's container CLI
 ```
 

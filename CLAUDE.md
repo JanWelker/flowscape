@@ -21,7 +21,9 @@ changing the code.
 | `internal/httpserver` | Routes, embedded SPA with cache headers and fallback |
 | `internal/metrics` | Prometheus collectors, prefix `flowscape_` |
 | `web/src` | One module per concern: `graph-state` (rings, rates, change sets), `layout` (ring, sunflower, reserved anchors), `scene` (renderer, bloom, floor, stars), `platforms`, `nodes` (InstancedMesh), `edges` (fat-line batches), `particles`, `picking`, `panel`, `filters`, `theme`, `ws-client` |
-| `web/e2e` | Playwright against `--demo`: WebGL, picking, the panel, the collapsible controls, and the README screenshot |
+| `cmd/flowscape-demo-wasm` | The demo source and the graph as WebAssembly for the GitHub Pages demo; ticks go to a JS callback instead of a WebSocket |
+| `web/src/demo-transport.ts` | Loads that module in the browser; `main.ts` picks it over the WebSocket when `VITE_STATIC_DEMO=1` |
+| `web/e2e` | Playwright against `--demo` (WebGL, picking, the panel, the collapsible controls, the README screenshot) and against the pages build |
 | `hack/` | `dev.sh` (backend plus Vite), `capture-flows.sh` (port-forward Relay, record a fixture) |
 | `deploy/README.md` | What any deployment needs from the app; the real manifests live in `homelab-apps` |
 
@@ -64,6 +66,12 @@ changing the code.
 - **Cilium's module is pinned to the cluster's minor.** Renovate leaves
   `github.com/cilium/cilium` minors and majors alone; bump it by hand with
   the platform chart.
+- **The pages demo must keep building for `GOOS=js GOARCH=wasm`.** The
+  packages it imports (`graph`, `hubble`, `hubble/fake`, `protocol`) must
+  stay free of gRPC, the metrics registry and anything else that does not
+  compile for wasm; `make test` vets that target. `make pages` builds the
+  site into `web/dist-pages`, which the Pages workflow deploys to
+  https://janwelker.github.io/flowscape/ on every push to `main`.
 - **Local images use Apple's `container` CLI, never Docker.** GitHub
   Actions builds with Buildx for `linux/amd64,linux/arm64`.
 - **Commits and PRs:** no emojis, no Claude co-author or "Generated with"

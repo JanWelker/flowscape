@@ -2,10 +2,18 @@ import type { Message } from "./protocol";
 
 export type ConnState = "connecting" | "open" | "closed";
 
+/** What the app needs from a message source: the WebSocket, or the demo in the browser. */
+export interface Transport {
+  paused: boolean;
+  connect(): void;
+  setPaused(p: boolean): void;
+  close(): void;
+}
+
 const MAX_BUFFER = 600; // ~60 s of ticks while paused
 
 /** Reconnecting WebSocket with a pause buffer. */
-export class WSClient {
+export class WSClient implements Transport {
   private ws: WebSocket | null = null;
   private backoff = 1000;
   private buffer: Message[] = [];

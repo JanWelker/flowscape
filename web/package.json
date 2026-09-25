@@ -10,7 +10,8 @@
     "test": "vitest --run",
     "lint": "eslint src e2e",
     "format": "prettier --write src e2e",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:pages": "vite build --base=/flowscape/ --outDir dist-pages"
   },
   "dependencies": {
     "three": "^0.186.0"

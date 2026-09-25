@@ -151,6 +151,14 @@ export class FiltersPanel {
     });
   }
 
+  /** A line under the status pill, for the demo page. */
+  setBanner(html: string): void {
+    const el = document.createElement("div");
+    el.className = "banner";
+    el.innerHTML = html;
+    this.root.querySelector("#pill")!.after(el);
+  }
+
   /** Fold the controls down to the brand and the status pill. */
   setCollapsed(collapsed: boolean, remember = true): void {
     this.root.classList.toggle("collapsed", collapsed);

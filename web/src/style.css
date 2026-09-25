@@ -491,3 +491,13 @@ button {
   font-style: italic;
   letter-spacing: 0.05em;
 }
+
+.banner {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.banner a {
+  color: var(--accent);
+}
