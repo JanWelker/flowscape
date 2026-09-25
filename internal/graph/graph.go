@@ -155,6 +155,7 @@ func (g *Graph) Ingest(f *flow.Flow) Result {
 	e.ring.add(t.Unix(), v)
 	if v == protocol.VerdictDropped && f.GetDropReasonDesc() != flow.DropReason_DROP_REASON_UNKNOWN {
 		e.drops.add(f.GetDropReasonDesc().String())
+		g.dirtyL7[id] = true // details changed: the tick carries drops and l7
 	}
 	if l7 := f.GetL7(); l7 != nil {
 		e.l7.observe(l7)

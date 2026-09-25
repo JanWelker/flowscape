@@ -203,6 +203,21 @@ func TestAddressAnchorRetiredWhenNamed(t *testing.T) {
 	findEdge(t, s.Edges, "reserved/node/node2|nextcloud/Deployment/nextcloud|ICMP|8")
 }
 
+func TestDropReasonIsSentInTick(t *testing.T) {
+	flows := loadFixture(t)
+	g := New(5 * time.Minute)
+	g.Ingest(flows[8]) // DROPPED POLICY_DENIED, cnpg -> nextcloud-db
+	tk := g.Tick(time.Date(2026, 9, 24, 10, 0, 7, 0, time.UTC))
+	if len(tk.Edges) != 1 || tk.Edges[0].Drops["POLICY_DENIED"] != 1 {
+		t.Fatalf("first tick edge = %+v", tk.Edges)
+	}
+	g.Ingest(flows[8])
+	tk = g.Tick(time.Date(2026, 9, 24, 10, 0, 8, 0, time.UTC))
+	if len(tk.Edges) != 1 || tk.Edges[0].D != 1 || tk.Edges[0].Drops["POLICY_DENIED"] != 2 {
+		t.Fatalf("second tick edge = %+v", tk.Edges)
+	}
+}
+
 func TestMachineChangeIsSentInTick(t *testing.T) {
 	flows := loadFixture(t)
 	g := New(5 * time.Minute)

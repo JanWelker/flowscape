@@ -11,7 +11,9 @@ audit mode would have.
 
 **[Live demo](https://janwelker.github.io/flowscape/)**: the demo source and
 the graph compiled to WebAssembly, running in your browser on a synthetic
-homelab cluster. Same code as the server, minus the WebSocket.
+homelab cluster. Same code as the server, minus the WebSocket. It redeploys
+on every push to `main`, and CI fails when the demo cluster stops showing
+something the UI can render, so the demo is always the current release.
 
 ## How it works
 

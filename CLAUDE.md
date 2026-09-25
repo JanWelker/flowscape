@@ -66,12 +66,18 @@ changing the code.
 - **Cilium's module is pinned to the cluster's minor.** Renovate leaves
   `github.com/cilium/cilium` minors and majors alone; bump it by hand with
   the platform chart.
-- **The pages demo must keep building for `GOOS=js GOARCH=wasm`.** The
-  packages it imports (`graph`, `hubble`, `hubble/fake`, `protocol`) must
-  stay free of gRPC, the metrics registry and anything else that does not
-  compile for wasm; `make test` vets that target. `make pages` builds the
-  site into `web/dist-pages`, which the Pages workflow deploys to
-  https://janwelker.github.io/flowscape/ on every push to `main`.
+- **The live demo is a contract, not a courtesy.** Every push to `main`
+  deploys it, so it is never a stale copy; and `web/e2e/static-demo.spec.ts`
+  asserts that the demo cluster exercises everything the UI renders
+  (machines, L7, verdicts, world names, every protocol). A change that
+  affects the demo therefore comes with the demo change in the same commit:
+  a new field the UI shows is produced by `internal/hubble/fake`; a new
+  wire message is emitted by `cmd/flowscape-demo-wasm` as well as the hub;
+  a new control has an assertion in the static-demo test. The wasm entry
+  point imports only `graph`, `hubble`, `hubble/fake` and `protocol`, which
+  must stay free of gRPC, the metrics registry and anything else that does
+  not compile for `GOOS=js GOARCH=wasm`; `make test` vets that target and
+  `make pages` builds the site into `web/dist-pages`.
 - **Local images use Apple's `container` CLI, never Docker.** GitHub
   Actions builds with Buildx for `linux/amd64,linux/arm64`.
 - **Commits and PRs:** no emojis, no Claude co-author or "Generated with"

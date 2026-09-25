@@ -3,18 +3,11 @@ name: Pages
 permissions:
   contents: read
 
+# Every push, no path filter: the demo is main, never a stale copy of it.
 "on":
   push:
     branches:
       - "main"
-    paths:
-      - "web/**"
-      - "cmd/**"
-      - "internal/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - ".github/workflows/pages.yaml"
   workflow_dispatch:
 
 concurrency:
