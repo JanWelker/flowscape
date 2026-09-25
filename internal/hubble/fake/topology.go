@@ -142,7 +142,9 @@ var conversations = []conversation{
 	{src: "reserved/host", dst: "nextcloud/nextcloud", proto: "TCP", port: 80, rate: 0.3},
 	{src: "reserved/host", dst: "home-assistant/home-assistant", proto: "TCP", port: 8123, rate: 0.3},
 	{src: "reserved/remote-node", dst: "authentik/authentik-server", proto: "TCP", port: 9000, rate: 0.3},
-	{src: "reserved/remote-node", dst: "monitoring/prometheus", proto: "ICMP", port: 8, rate: 0.2},
+	{src: "reserved/remote-node", dst: "monitoring/prometheus", proto: "ICMP", port: 8, rate: 0.6},
+	// cilium-health pings every node's health endpoint from every other node.
+	{src: "reserved/remote-node", dst: "kube-system/coredns", proto: "ICMP", port: 8, rate: 1.5},
 }
 
 var nodeNames = []string{"cp1", "cp2", "cp3", "w1", "w2", "w3"}

@@ -10,7 +10,20 @@ test("the static demo runs the Go source in the browser", async ({ page }) => {
   await page.waitForFunction(() => document.body.dataset.ready === "true", null, {
     timeout: 120_000,
   });
-  await page.waitForTimeout(3000);
+  // The rarer conversations (drops, ICMP) take a few seconds to appear.
+  await page.waitForFunction(
+    () => {
+      const edges = [...window.flowscape.state.edges.values()];
+      return (
+        edges.some((e) => e.proto === "ICMP") &&
+        edges.some((e) => e.drops) &&
+        edges.some((e) => e.totals[2] > 0) &&
+        window.flowscape.particles.count > 0
+      );
+    },
+    null,
+    { timeout: 60_000 },
+  );
   const stats = await page.evaluate(() => ({
     nodes: window.flowscape.state.nodes.size,
     edges: window.flowscape.state.edges.size,
