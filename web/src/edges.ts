@@ -80,6 +80,7 @@ export class Edges {
         depthWrite: false,
         worldUnits: false,
         fog: true,
+        alphaToCoverage: true,
       });
       const mesh = new LineSegments2(geom, mat);
       mesh.frustumCulled = false;

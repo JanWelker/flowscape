@@ -11,6 +11,7 @@ export const theme = {
   label: "rgba(226, 232, 240, 0.9)",
   bloom: { strength: 1.15, radius: 0.45, threshold: 0.55 },
   maxPixelRatio: 1.5,
+  msaaSamples: 4,
 };
 
 const hueCache = new Map<string, number>();
