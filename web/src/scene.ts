@@ -6,6 +6,7 @@ import {
   Color,
   Float32BufferAttribute,
   FogExp2,
+  HalfFloatType,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
@@ -16,6 +17,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -43,6 +45,8 @@ export class SceneHost {
   frames = 0;
 
   constructor(private readonly container: HTMLElement) {
+    // The canvas only receives the composer's resolved image, so MSAA lives on
+    // the composer's render target, not on the renderer.
     this.renderer = new WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, theme.maxPixelRatio));
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -71,7 +75,10 @@ export class SceneHost {
       this.controls.autoRotate = false;
     });
 
-    this.composer = new EffectComposer(this.renderer);
+    this.composer = new EffectComposer(
+      this.renderer,
+      new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: theme.msaaSamples }),
+    );
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     const bloom = new UnrealBloomPass(
       new Vector2(1, 1),
