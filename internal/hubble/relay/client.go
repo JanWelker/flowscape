@@ -40,9 +40,11 @@ type Client struct {
 }
 
 const (
-	minBackoff = 500 * time.Millisecond
-	maxBackoff = 30 * time.Second
-	healthy    = 60 * time.Second
+	minBackoff   = 500 * time.Millisecond
+	maxBackoff   = 30 * time.Second
+	healthy      = 60 * time.Second
+	nodesEvery   = time.Minute
+	nodesTimeout = 5 * time.Second
 )
 
 // Name implements hubble.Source.
@@ -159,6 +161,19 @@ func (c *Client) stream(ctx context.Context, client observer.ObserverClient, sin
 	if err != nil {
 		return err
 	}
+	c.syncNodes(sctx, client, sink)
+	go func() {
+		t := time.NewTicker(nodesEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-sctx.Done():
+				return
+			case <-t.C:
+				c.syncNodes(sctx, client, sink)
+			}
+		}
+	}()
 	watchdog := 2 * c.Window
 	if watchdog < 30*time.Second {
 		watchdog = 30 * time.Second
@@ -191,8 +206,25 @@ func (c *Client) stream(ctx context.Context, client observer.ObserverClient, sin
 			sink.Flow(r.Flow)
 		case *observer.GetFlowsResponse_NodeStatus:
 			sink.NodeStatus(r.NodeStatus)
+			c.syncNodes(sctx, client, sink)
 		case *observer.GetFlowsResponse_LostEvents:
 			sink.Lost(r.LostEvents)
 		}
 	}
+}
+
+// syncNodes hands Relay's peer list to the sink: it names the machines by
+// address and says which of them Relay cannot reach. A Relay without the
+// RPC only costs a debug line.
+func (c *Client) syncNodes(ctx context.Context, client observer.ObserverClient, sink hubble.Sink) {
+	nctx, cancel := context.WithTimeout(ctx, nodesTimeout)
+	defer cancel()
+	resp, err := client.GetNodes(nctx, &observer.GetNodesRequest{})
+	if err != nil {
+		if ctx.Err() == nil {
+			c.Log.Debug("relay peer list unavailable", "err", err)
+		}
+		return
+	}
+	sink.Nodes(resp.GetNodes())
 }

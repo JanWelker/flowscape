@@ -215,6 +215,17 @@ func (g *Graph) retireAddress(ip string) {
 	}
 }
 
+// LearnMachines records machine addresses from outside the flow stream,
+// such as Relay's peer list, so a node is named before any of its own
+// flows arrive and while its agent is unreachable.
+func (g *Graph) LearnMachines(addrs map[string]string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for ip, name := range addrs {
+		learnMachine(ip, name, g.nodeIPs, g.retireAddress)
+	}
+}
+
 // placeOn records that a workload's pod runs on machine; a change of the
 // most frequent machine is sent to the clients with the next tick.
 func (g *Graph) placeOn(n *Node, machine string) {

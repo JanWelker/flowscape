@@ -77,6 +77,45 @@ func TestEndpointKeyMachines(t *testing.T) {
 	if got := endpointKey(host, nil, "", "", nil, nil); got != (NodeKey{"reserved", "host", "host"}) {
 		t.Errorf("host without observer = %+v", got)
 	}
+	// A control-plane machine also carries the API server label; the
+	// machine wins on both sides and its address is learned all the same.
+	cpHost := &flow.Endpoint{Labels: []string{"reserved:host", "reserved:kube-apiserver"}}
+	cpRemote := &flow.Endpoint{Labels: []string{"reserved:kube-apiserver", "reserved:remote-node"}}
+	if got := endpointKey(cpHost, nil, "10.9.2.1", "cp3", ips, nil); got != (NodeKey{"reserved", "node", "cp3"}) {
+		t.Errorf("control-plane host = %+v", got)
+	}
+	if got := endpointKey(cpRemote, nil, "10.9.2.1", "cp1", ips, nil); got != (NodeKey{"reserved", "node", "cp3"}) {
+		t.Errorf("control-plane remote = %+v", got)
+	}
+	if got := endpointKey(cpRemote, nil, "10.9.2.9", "cp1", ips, nil); got != (NodeKey{"reserved", "remote-node", "10.9.2.9"}) {
+		t.Errorf("unnamed control-plane remote = %+v", got)
+	}
+}
+
+func TestLearnMachinesRetiresAddress(t *testing.T) {
+	g := New(time.Minute)
+	remote := &flow.Endpoint{Labels: []string{"reserved:remote-node"}}
+	pod := &flow.Endpoint{Namespace: "a", PodName: "x-1", Workloads: []*flow.Workload{{Name: "x", Kind: "Deployment"}}}
+	f := &flow.Flow{Time: timestamppb.Now(), Verdict: flow.Verdict_FORWARDED, NodeName: "w1",
+		IP: &flow.IP{Source: "10.9.2.12", Destination: "10.244.1.5"}, Source: remote, Destination: pod,
+		L4: &flow.Layer4{Protocol: &flow.Layer4_TCP{TCP: &flow.TCP{DestinationPort: 80}}}}
+	g.Ingest(f)
+	if _, ok := g.nodes["reserved/remote-node/10.9.2.12"]; !ok {
+		t.Fatal("address anchor missing before the peer list")
+	}
+	g.Tick(time.Now())
+	g.LearnMachines(map[string]string{"10.9.2.12": "w2"})
+	if _, ok := g.nodes["reserved/remote-node/10.9.2.12"]; ok {
+		t.Fatal("address anchor survived the peer list")
+	}
+	g.Ingest(f)
+	if _, ok := g.nodes["reserved/node/w2"]; !ok {
+		t.Fatal("flow after the peer list not filed under the machine name")
+	}
+	tk := g.Tick(time.Now())
+	if len(tk.Gone.Nodes) != 1 || tk.Gone.Nodes[0] != "reserved/remote-node/10.9.2.12" {
+		t.Fatalf("gone = %+v", tk.Gone.Nodes)
+	}
 }
 
 func TestPathPrefix(t *testing.T) {

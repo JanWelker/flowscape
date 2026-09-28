@@ -410,7 +410,27 @@ button {
   color: var(--muted);
   z-index: 5;
 }
+#colophon {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.7;
+  pointer-events: none;
+  user-select: none;
+}
+#colophon span + span::before {
+  content: "\00b7";
+  margin-right: 10px;
+}
 @media (max-width: 720px) {
+  #colophon {
+    display: none;
+  }
   #filters {
     width: calc(100vw - 32px);
     max-height: 40vh;

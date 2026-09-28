@@ -55,6 +55,7 @@ func (s *sink) Flow(f *flow.Flow) {
 }
 
 func (s *sink) NodeStatus(*relay.NodeStatusEvent) {}
+func (s *sink) Nodes([]*observer.Node)            {}
 func (s *sink) Lost(*flow.LostEvent)              {}
 
 func main() {
