@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cilium/cilium/api/v1/flow"
+	"github.com/cilium/cilium/api/v1/observer"
 	"github.com/cilium/cilium/api/v1/relay"
 
 	"github.com/JanWelker/flowscape/internal/graph"
@@ -55,6 +56,7 @@ func (s *sink) Flow(f *flow.Flow) {
 }
 
 func (s *sink) NodeStatus(*relay.NodeStatusEvent) {}
+func (s *sink) Nodes([]*observer.Node)            {}
 func (s *sink) Lost(*flow.LostEvent)              {}
 
 func main() {

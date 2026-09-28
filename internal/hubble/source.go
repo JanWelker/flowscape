@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/cilium/cilium/api/v1/flow"
+	"github.com/cilium/cilium/api/v1/observer"
 	"github.com/cilium/cilium/api/v1/relay"
 )
 
@@ -15,6 +16,8 @@ import (
 type Sink interface {
 	Flow(*flow.Flow)
 	NodeStatus(*relay.NodeStatusEvent)
+	// Nodes carries Relay's full peer list, on connect and periodically.
+	Nodes([]*observer.Node)
 	Lost(*flow.LostEvent)
 }
 
@@ -58,6 +61,19 @@ func (s *Status) Apply(ev *relay.NodeStatusEvent) {
 			s.unavailable[n] = struct{}{}
 		default:
 			delete(s.unavailable, n)
+		}
+	}
+}
+
+// SetNodes replaces the unavailable set with what Relay's peer list says.
+func (s *Status) SetNodes(nodes []*observer.Node) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unavailable = map[string]struct{}{}
+	for _, n := range nodes {
+		switch n.GetState() {
+		case relay.NodeState_NODE_UNAVAILABLE, relay.NodeState_NODE_ERROR:
+			s.unavailable[n.GetName()] = struct{}{}
 		}
 	}
 }

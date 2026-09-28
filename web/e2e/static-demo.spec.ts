@@ -14,14 +14,17 @@ test("the static demo runs the Go source in the browser", async ({ page }) => {
   await page.waitForFunction(() => document.body.dataset.ready === "true", null, {
     timeout: 120_000,
   });
-  // The rarer conversations (drops, ICMP) take a few seconds to appear.
+  // The rarer conversations (drops, ICMP, the seldom-called world names)
+  // take a few seconds to appear.
   await page.waitForFunction(
     () => {
       const edges = [...window.flowscape.state.edges.values()];
+      const nodes = [...window.flowscape.state.nodes.values()];
       return (
         edges.some((e) => e.proto === "ICMP") &&
         edges.some((e) => e.drops) &&
         edges.some((e) => e.totals[2] > 0) &&
+        nodes.filter((n) => n.kind === "world" && n.fqdn).length >= 5 &&
         window.flowscape.particles.count > 0
       );
     },

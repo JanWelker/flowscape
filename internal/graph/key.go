@@ -50,7 +50,10 @@ var workloadKinds = map[string]string{
 // names Hubble resolved for that side, ip its address, observer the node
 // whose agent saw the flow, and nodeIPs the machine addresses learned so
 // far: a reserved host is the observer itself, a remote-node is looked up
-// by address and stays an address until some flow on that machine names it.
+// by address and stays an address until the machine is named, by one of
+// its own flows or by Relay's peer list. A control-plane host also carries
+// reserved:kube-apiserver; the machine wins so that every node is one
+// anchor under its name.
 func endpointKey(ep *flow.Endpoint, names []string, ip, observer string, nodeIPs map[string]string, learned func(ip string)) NodeKey {
 	if ep == nil {
 		return NodeKey{"unknown", "ip", ip}
@@ -76,7 +79,10 @@ func endpointKey(ep *flow.Endpoint, names []string, ip, observer string, nodeIPs
 	for _, l := range ep.GetLabels() {
 		switch {
 		case strings.HasPrefix(l, "reserved:"):
-			reserved = strings.TrimPrefix(l, "reserved:")
+			r := strings.TrimPrefix(l, "reserved:")
+			if reservedRank[r] >= reservedRank[reserved] {
+				reserved = r
+			}
 		case strings.HasPrefix(l, "cidr:"):
 			cidr = strings.TrimPrefix(l, "cidr:")
 		}
@@ -96,14 +102,7 @@ func endpointKey(ep *flow.Endpoint, names []string, ip, observer string, nodeIPs
 		return NodeKey{ReservedNamespace, "world", name}
 	case "host":
 		if observer != "" {
-			if ip != "" && nodeIPs != nil {
-				if _, known := nodeIPs[ip]; !known {
-					nodeIPs[ip] = observer
-					if learned != nil {
-						learned(ip)
-					}
-				}
-			}
+			learnMachine(ip, observer, nodeIPs, learned)
 			return NodeKey{ReservedNamespace, "node", observer}
 		}
 		return NodeKey{ReservedNamespace, "host", "host"}
@@ -119,6 +118,25 @@ func endpointKey(ep *flow.Endpoint, names []string, ip, observer string, nodeIPs
 		return NodeKey{ReservedNamespace, reserved, reserved}
 	}
 	return NodeKey{"unknown", "ip", ip}
+}
+
+// reservedRank orders the reserved labels of one identity: the machine
+// labels beat the roles it also carries, the rest ties on first-seen.
+var reservedRank = map[string]int{"remote-node": 1, "host": 2}
+
+// learnMachine records that ip belongs to machine and, when it is news,
+// tells learned so the anchor the address had can be retired.
+func learnMachine(ip, machine string, nodeIPs map[string]string, learned func(ip string)) {
+	if ip == "" || machine == "" || nodeIPs == nil {
+		return
+	}
+	if nodeIPs[ip] == machine {
+		return
+	}
+	nodeIPs[ip] = machine
+	if learned != nil {
+		learned(ip)
+	}
 }
 
 // stripHash removes the pod-template hash from a ReplicaSet name.

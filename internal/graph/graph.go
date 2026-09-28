@@ -215,6 +215,17 @@ func (g *Graph) retireAddress(ip string) {
 	}
 }
 
+// LearnMachines records machine addresses from outside the flow stream,
+// such as Relay's peer list, so a node is named before any of its own
+// flows arrive and while its agent is unreachable.
+func (g *Graph) LearnMachines(addrs map[string]string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for ip, name := range addrs {
+		learnMachine(ip, name, g.nodeIPs, g.retireAddress)
+	}
+}
+
 // placeOn records that a workload's pod runs on machine; a change of the
 // most frequent machine is sent to the clients with the next tick.
 func (g *Graph) placeOn(n *Node, machine string) {
@@ -262,12 +273,14 @@ func (e *Edge) json(counts [4]uint64, withL7 bool) protocol.Edge {
 		F: counts[0], D: counts[1], A: counts[2], E: counts[3], Last: e.LastSeen.UnixMilli(),
 	}
 	if withL7 {
+		// Copies: the hub encodes the tick after the lock is released,
+		// while the next flow keeps writing the counters.
 		if e.l7.http != nil || e.l7.dns != nil || e.l7.status != 0 {
-			out.L7 = &protocol.L7{HTTP: e.l7.http, DNS: e.l7.dns, Status: e.l7.status}
+			out.L7 = &protocol.L7{HTTP: e.l7.http.copy(), DNS: e.l7.dns.copy(), Status: e.l7.status}
 		}
 		out.LatencyMs = e.l7.latency
 		if len(e.drops) > 0 {
-			out.Drops = e.drops
+			out.Drops = e.drops.copy()
 		}
 	}
 	return out

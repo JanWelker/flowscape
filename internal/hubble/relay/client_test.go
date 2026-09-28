@@ -41,9 +41,21 @@ func (s *fakeStream) Recv() (*observer.GetFlowsResponse, error) {
 
 type fakeObserver struct {
 	observer.ObserverClient
-	mu       sync.Mutex
-	requests []*observer.GetFlowsRequest
-	plan     []*fakeStream
+	mu        sync.Mutex
+	requests  []*observer.GetFlowsRequest
+	plan      []*fakeStream
+	peers     []*observer.Node
+	nodeCalls int
+}
+
+func (f *fakeObserver) GetNodes(context.Context, *observer.GetNodesRequest, ...grpc.CallOption) (*observer.GetNodesResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nodeCalls++
+	if f.peers == nil {
+		return nil, status.Error(codes.Unimplemented, "old relay")
+	}
+	return &observer.GetNodesResponse{Nodes: f.peers}, nil
 }
 
 func (f *fakeObserver) GetFlows(ctx context.Context, in *observer.GetFlowsRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[observer.GetFlowsResponse], error) {
@@ -67,6 +79,13 @@ type recSink struct {
 	mu    sync.Mutex
 	flows []*flow.Flow
 	nodes []*relay.NodeStatusEvent
+	peers [][]*observer.Node
+}
+
+func (s *recSink) Nodes(n []*observer.Node) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peers = append(s.peers, n)
 }
 
 func (s *recSink) Flow(f *flow.Flow) {
@@ -137,6 +156,11 @@ func TestReconnectResumesFromLastFlow(t *testing.T) {
 	if len(sink.flows) != 4 || len(sink.nodes) != 1 {
 		t.Fatalf("sink got %d flows %d node events", len(sink.flows), len(sink.nodes))
 	}
+	// The peer list is asked for on every stream open and after each
+	// node status event; a relay without the RPC never reaches the sink.
+	if obs.nodeCalls != 4 || len(sink.peers) != 0 {
+		t.Fatalf("peer list: %d calls, %d deliveries", obs.nodeCalls, len(sink.peers))
+	}
 	if got := obs.requests[1].GetSince().AsTime(); !got.Equal(t0.Add(time.Second)) {
 		t.Errorf("second request since = %v, want %v", got, t0.Add(time.Second))
 	}
@@ -149,5 +173,31 @@ func TestReconnectResumesFromLastFlow(t *testing.T) {
 	req := obs.requests[0]
 	if !req.GetFollow() || len(req.GetBlacklist()) != 3 || req.GetFieldMask() == nil {
 		t.Errorf("request = %v", req)
+	}
+}
+
+func TestPeerListReachesSink(t *testing.T) {
+	peers := []*observer.Node{{Name: "w1", Address: "10.9.2.21:4244", State: relay.NodeState_NODE_CONNECTED}}
+	obs := &fakeObserver{peers: peers, plan: []*fakeStream{{items: []*observer.GetFlowsResponse{flowAt(time.Now().Add(time.Hour))}}}}
+	c := &Client{Addr: "test", Window: time.Minute, Status: &hubble.Status{},
+		Dial: func(context.Context) (observer.ObserverClient, io.Closer, error) { return obs, nopCloser{}, nil },
+	}
+	sink := &recSink{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, sink) }()
+	for i := 0; i < 100; i++ {
+		sink.mu.Lock()
+		n := len(sink.peers)
+		sink.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if len(sink.peers) != 1 || sink.peers[0][0].GetName() != "w1" {
+		t.Fatalf("sink peers = %+v", sink.peers)
 	}
 }

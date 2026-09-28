@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cilium/cilium/api/v1/flow"
+	"github.com/cilium/cilium/api/v1/observer"
 	"github.com/cilium/cilium/api/v1/relay"
 	"github.com/coder/websocket"
 
@@ -120,6 +122,27 @@ func (h *Hub) NodeStatus(ev *relay.NodeStatusEvent) {
 	h.status.Apply(ev)
 	h.m.RelayUnavailable.Set(float64(len(h.status.Unavailable())))
 	h.log.Info("relay node status", "state", ev.GetStateChange().String(), "nodes", ev.GetNodeNames(), "message", ev.GetMessage())
+}
+
+// Nodes implements hubble.Sink: the peer list names every machine by its
+// address and is the authoritative unavailable set.
+func (h *Hub) Nodes(nodes []*observer.Node) {
+	addrs := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		if n.GetName() == "" {
+			continue
+		}
+		host := n.GetAddress()
+		if hp, _, err := net.SplitHostPort(host); err == nil {
+			host = hp
+		}
+		if host != "" {
+			addrs[host] = n.GetName()
+		}
+	}
+	h.g.LearnMachines(addrs)
+	h.status.SetNodes(nodes)
+	h.m.RelayUnavailable.Set(float64(len(h.status.Unavailable())))
 }
 
 // Lost implements hubble.Sink.
