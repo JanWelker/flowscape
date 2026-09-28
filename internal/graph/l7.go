@@ -23,6 +23,18 @@ func (t *topCounter) add(key string) {
 }
 
 // l7Summary is what the UI shows for proxied traffic.
+// copy returns an independent map, nil for nil.
+func (t topCounter) copy() map[string]uint32 {
+	if t == nil {
+		return nil
+	}
+	out := make(map[string]uint32, len(t))
+	for k, v := range t {
+		out[k] = v
+	}
+	return out
+}
+
 type l7Summary struct {
 	http    topCounter
 	dns     topCounter
