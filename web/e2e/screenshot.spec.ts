@@ -6,7 +6,8 @@ test("renders the demo cluster and takes the README screenshot", async ({ page }
   page.on("console", (m) => {
     if (m.type() === "error" && !m.text().includes("favicon")) errors.push(m.text());
   });
-  // The visit counter in index.html reaches for the homelab; the tests do not.
+  // The visit counter loads nothing on localhost; should that change, the tests
+  // still never reach the homelab.
   await page.route("https://analytics.k8s.wlkr.ch/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/javascript", body: "" }),
   );

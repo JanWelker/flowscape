@@ -5,16 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>Flowscape</title>
-    <!-- Self-hosted, cookieless visit counter for the GitHub Pages demo. The same
-         document is embedded in the binary, and data-domains is what keeps a
-         deployment from reporting: anywhere but the demo's hostname the browser
-         fetches the script and the script sends nothing. -->
-    <script
-      defer
-      src="https://analytics.k8s.wlkr.ch/script.js"
-      data-website-id="83534e88-30c9-4765-b303-df4f4345002f"
-      data-domains="janwelker.github.io"
-    ></script>
+    <!-- Self-hosted, cookieless visit counter. The same document is the
+         GitHub Pages demo and the page embedded in the binary, so the website
+         is picked by hostname: the demo and the homelab deployment each count
+         as their own, and anywhere else nothing is loaded at all. -->
+    <script>
+      (function () {
+        var sites = {
+          "janwelker.github.io": "83534e88-30c9-4765-b303-df4f4345002f",
+          "flowscape.k8s.wlkr.ch": "9390939c-b7a6-4262-8cc7-8b3b4a6a1ecc",
+        };
+        var id = sites[location.hostname];
+        if (!id) return;
+        var s = document.createElement("script");
+        s.defer = true;
+        s.src = "https://analytics.k8s.wlkr.ch/script.js";
+        s.dataset.websiteId = id;
+        s.dataset.domains = location.hostname;
+        document.head.appendChild(s);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
