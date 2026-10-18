@@ -3,7 +3,7 @@ module github.com/JanWelker/flowscape
 go 1.27.1
 
 require (
-	github.com/cilium/cilium v1.20.2
+	github.com/cilium/cilium v1.20.3
 	github.com/coder/websocket v1.8.15
 	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/sync v0.24.0
@@ -21,5 +21,5 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 )
