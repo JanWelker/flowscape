@@ -1,0 +1,15 @@
+# The build copies the repository with `COPY . .`; keep secrets, history and
+# host build output out of the context.
+.git
+.github
+.env*
+**/.DS_Store
+bin/
+dist/
+/flowscape
+web/node_modules/
+web/dist/
+web/dist-pages/
+web/playwright-report/
+web/test-results/
+.playwright-mcp/

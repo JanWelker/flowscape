@@ -101,7 +101,8 @@ make run-replay FILE=flows.jsonl
 go vet ./... && golangci-lint run ./... && go test -race ./...
 npm --prefix web run lint && npm --prefix web test && npm --prefix web run build
 npm --prefix web run e2e
-npx --package renovate@latest renovate-config-validator
+v=$(yq .env.RENOVATE_VERSION .github/workflows/renovate-validate.yaml)
+npx --package "renovate@$v" renovate-config-validator --strict --no-global renovate.json
 ```
 
 ## Releasing
