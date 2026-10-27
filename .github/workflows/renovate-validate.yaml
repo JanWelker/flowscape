@@ -17,10 +17,14 @@ permissions:
       - ".github/workflows/renovate-validate.yaml"
   workflow_dispatch:
 
+env:
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: 44.123.0
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Validate Renovate Config
-        run: npx --package renovate@latest renovate-config-validator
+        run: npx --yes --package "renovate@${RENOVATE_VERSION}" renovate-config-validator --strict --no-global renovate.json

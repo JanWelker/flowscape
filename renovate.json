@@ -8,6 +8,18 @@
   ],
   "packageRules": [
     {
+      "description": "Renovate releases several times a day; the config validator needs one bump a week.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "schedule": [
+        "* 0-5 * * 1"
+      ]
+    },
+    {
       "description": "three and its types move together or the build breaks.",
       "matchPackageNames": [
         "three",
