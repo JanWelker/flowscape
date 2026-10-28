@@ -196,7 +196,9 @@ func TestPeerListReachesSink(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	cancel()
-	<-done
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v, want context.Canceled", err)
+	}
 	if len(sink.peers) != 1 || sink.peers[0][0].GetName() != "w1" {
 		t.Fatalf("sink peers = %+v", sink.peers)
 	}
