@@ -21,7 +21,7 @@
     "@playwright/test": "1.65.0",
     "@types/three": "0.187.0",
     "eslint": "10.14.0",
-    "prettier": "3.9.10",
+    "prettier": "3.10.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.2",
     "vite": "8.3.8",
