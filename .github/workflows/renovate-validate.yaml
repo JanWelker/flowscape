@@ -11,10 +11,8 @@ permissions:
     paths:
       - "renovate.json"
       - ".github/workflows/renovate-validate.yaml"
+  # Every pull request, so the ruleset can require it; it takes seconds.
   pull_request:
-    paths:
-      - "renovate.json"
-      - ".github/workflows/renovate-validate.yaml"
   workflow_dispatch:
 
 env:
